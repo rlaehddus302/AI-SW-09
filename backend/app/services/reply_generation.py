@@ -1,4 +1,4 @@
-"""Reply generation service and generation-stage pipeline helper."""
+"""답변 생성 서비스와 생성 단계 파이프라인 헬퍼입니다."""
 
 from __future__ import annotations
 
@@ -15,8 +15,7 @@ REPLY_TEXT_KEYS = ("reply_text", "reply", "answer", "response", "message", "cont
 
 
 def extract_reply_text(raw: Mapping[str, Any]) -> str:
-    """Extract reply text from the strict schema, with aliases for live model drift."""
-
+    """live 모델이 스키마를 약간 벗어나도 답변 텍스트 후보를 안전하게 추출합니다."""
     for key in REPLY_TEXT_KEYS:
         value = raw.get(key)
         if isinstance(value, str) and value.strip():
@@ -32,14 +31,7 @@ def generate_reply(
     rag_references: Optional[Sequence[Mapping[str, Any]]] = None,
     client: Optional[AIClientProtocol] = None,
 ) -> Dict[str, Any]:
-    """
-    Generate a reply draft.
-
-    If JSON parsing still fails after the client's one retry, this returns an
-    empty draft per SPEC so routers can keep the review in analyzed state.
-    Timeout/API errors are allowed to propagate.
-    """
-
+    """리뷰 원문, 해석 결과, 가게 정보, RAG 참고 사례로 답변 초안을 생성합니다."""
     if not isinstance(review_text, str) or not review_text.strip():
         raise ValueError("review_text must not be empty")
     if not isinstance(store_info, Mapping):
@@ -86,17 +78,7 @@ def generate_reply_pipeline(
     client: Optional[AIClientProtocol] = None,
     top_k: int = 3,
 ) -> Dict[str, Any]:
-    """
-    Run RAG search, reply generation, and approval gate for one analyzed review.
-
-    Return shape is ready for a router to persist:
-    {
-      "reply_text": str,
-      "status": "auto_replied" | "needs_approval" | "analyzed",
-      "rag_references": [...]
-    }
-    """
-
+    """분석 완료 리뷰 1건에 대해 RAG 검색, 답변 생성, 승인 게이트를 순서대로 실행합니다."""
     ai_client = client or create_ai_client()
     rag = rag_service or RAGService(client=ai_client)
     references = rag.search(

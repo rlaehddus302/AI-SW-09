@@ -1,1 +1,1 @@
-"""Service layer for AI review workflows."""
+"""AI 리뷰 처리 워크플로우의 서비스 계층입니다."""

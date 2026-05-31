@@ -1,4 +1,4 @@
-"""LLM integration helpers."""
+"""LLM 연동 헬퍼 패키지입니다."""
 
 from .client import (
     AIClientProtocol,

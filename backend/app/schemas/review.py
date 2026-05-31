@@ -9,16 +9,22 @@ from app.models.enums import OrderType, ReviewStatus, RiskLevel, Sentiment
 
 
 class BatchReviewRequest(BaseModel):
+    """여러 리뷰를 한 번에 처리할 때 받는 리뷰 id 목록입니다."""
+
     review_ids: list[int] = Field(min_length=1, max_length=100)
 
     @model_validator(mode="after")
     def reject_duplicate_ids(self) -> "BatchReviewRequest":
+        """같은 리뷰 id가 중복 요청되는 것을 validation 단계에서 차단합니다."""
+
         if len(self.review_ids) != len(set(self.review_ids)):
             raise ValueError("review_ids must not contain duplicates")
         return self
 
 
 class ReviewListItem(BaseModel):
+    """리뷰 목록 화면에서 필요한 요약 응답 필드입니다."""
+
     id: int
     review_text: str
     reviewer_name: Optional[str]
@@ -35,6 +41,8 @@ class ReviewListItem(BaseModel):
 
 
 class ReviewListResponse(BaseModel):
+    """페이지네이션된 리뷰 목록 응답입니다."""
+
     total: int
     page: int
     size: int
@@ -42,18 +50,24 @@ class ReviewListResponse(BaseModel):
 
 
 class Interpretation(BaseModel):
+    """AI 해석 결과의 핵심 이슈, 답변 방향, 답변 톤입니다."""
+
     core_issue: Optional[str] = None
     action_direction: Optional[str] = None
     reply_tone: Optional[str] = None
 
 
 class RagReference(BaseModel):
+    """답변 생성에 참고한 유사 리뷰-답변 사례입니다."""
+
     review: str
     reply: str
     similarity: Optional[float] = None
 
 
 class ReviewDetail(BaseModel):
+    """리뷰 상세 패널에서 사용하는 전체 리뷰 응답입니다."""
+
     id: int
     store_id: int
     review_text: str
@@ -72,6 +86,8 @@ class ReviewDetail(BaseModel):
 
 
 class ReviewStats(BaseModel):
+    """리뷰 대시보드 통계 카드와 분포 차트에 쓰는 집계 응답입니다."""
+
     total_reviews: int
     sentiment_distribution: dict[str, int]
     risk_distribution: dict[str, int]
@@ -80,17 +96,23 @@ class ReviewStats(BaseModel):
 
 
 class AnalysisTaskResponse(BaseModel):
+    """분석/답변 생성 배치 작업 시작 응답입니다."""
+
     task_id: str
     message: str
     total: int
 
 
 class RegenerateTaskResponse(BaseModel):
+    """답변 재생성 작업 시작 응답입니다."""
+
     task_id: str
     message: str
 
 
 class ActionResponse(BaseModel):
+    """승인, 반려 같은 단일 리뷰 상태 변경 응답입니다."""
+
     id: int
     status: ReviewStatus
     message: str

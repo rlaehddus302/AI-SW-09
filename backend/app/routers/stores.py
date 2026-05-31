@@ -12,6 +12,8 @@ router = APIRouter(prefix="/stores", tags=["stores"])
 
 @router.post("", response_model=StoreRead, status_code=status.HTTP_201_CREATED)
 def create_store(payload: StoreCreate, db: Session = Depends(get_db)) -> Store:
+    """로컬 MVP에서 사용하는 고정 데모 가게를 생성하거나 갱신합니다."""
+
     values = payload.model_dump()
     store = db.get(Store, DEMO_STORE_ID)
     if store is None:
@@ -27,11 +29,15 @@ def create_store(payload: StoreCreate, db: Session = Depends(get_db)) -> Store:
 
 @router.get("/{store_id}", response_model=StoreRead)
 def read_store(store_id: int, db: Session = Depends(get_db)) -> Store:
+    """가게 1건을 반환하거나 공통 404 응답을 발생시킵니다."""
+
     return get_store_or_404(db, store_id)
 
 
 @router.put("/{store_id}", response_model=StoreRead)
 def update_store(store_id: int, payload: StoreUpdate, db: Session = Depends(get_db)) -> Store:
+    """데모 설정 화면에서 수정 가능한 가게 필드를 교체합니다."""
+
     store = get_store_or_404(db, store_id)
     for field, value in payload.model_dump().items():
         setattr(store, field, value)

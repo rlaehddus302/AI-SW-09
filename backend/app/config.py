@@ -10,6 +10,7 @@ BACKEND_ROOT = Path(__file__).resolve().parents[1]
 
 
 class Settings(BaseSettings):
+    """루트와 백엔드 env 파일에서 읽어오는 애플리케이션 설정입니다."""
     app_name: str = "Review Helper API"
     api_v1_prefix: str = "/api/v1"
     database_url: str = Field(
@@ -21,9 +22,9 @@ class Settings(BaseSettings):
     seed_on_startup: bool = Field(default=True, validation_alias="SEED_ON_STARTUP")
     seed_rag_on_startup: bool = Field(default=True, validation_alias="SEED_RAG_ON_STARTUP")
     cors_origins: str = Field(default="http://localhost:5173", validation_alias="CORS_ORIGINS")
-    # AI_MODE is intentionally explicit:
-    # - mock: deterministic local AI, no external network calls.
-    # - live: real Upstage API calls; UPSTAGE_API_KEY is required.
+    # AI_MODE는 의도적으로 명시값만 허용합니다:
+    # - mock: 외부 호출 없는 deterministic 로컬 AI
+    # - live: 실제 Upstage API 호출, UPSTAGE_API_KEY 필수
     ai_mode: str = Field(default="mock", validation_alias="AI_MODE")
     upstage_api_key: Optional[str] = Field(default=None, validation_alias="UPSTAGE_API_KEY")
     upstage_base_url: str = Field(default="https://api.upstage.ai/v1", validation_alias="UPSTAGE_BASE_URL")
@@ -68,9 +69,11 @@ class Settings(BaseSettings):
 
     @property
     def cors_origin_list(self) -> list[str]:
+        """쉼표로 구분된 CORS_ORIGINS 값을 FastAPI가 받는 리스트 형태로 변환합니다."""
         return [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
 
 
 @lru_cache
 def get_settings() -> Settings:
+    """설정 객체를 프로세스 안에서 재사용하도록 캐시해서 반환합니다."""
     return Settings()

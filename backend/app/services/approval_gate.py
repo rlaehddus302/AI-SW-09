@@ -1,4 +1,4 @@
-"""Approval gate for generated review replies."""
+"""생성된 리뷰 답변의 승인 필요 여부를 결정합니다."""
 
 from __future__ import annotations
 
@@ -6,13 +6,7 @@ from typing import Optional
 
 
 def determine_approval(risk_level: Optional[str], sentiment: Optional[str]) -> str:
-    """
-    Return the next review status after reply generation.
-
-    Only low-risk positive reviews can be auto-replied. Every ambiguous or
-    risk-bearing case requires owner approval.
-    """
-
+    """답변 생성 후 리뷰가 자동 답변 가능한지, 사장님 승인이 필요한지 결정합니다."""
     normalized_risk = (risk_level or "").strip().lower()
     normalized_sentiment = (sentiment or "").strip().lower()
 

@@ -1,4 +1,4 @@
-"""Review classification service."""
+"""리뷰 분류 서비스입니다."""
 
 from __future__ import annotations
 
@@ -28,13 +28,7 @@ def classify_review(
     *,
     client: Optional[AIClientProtocol] = None,
 ) -> Dict[str, Any]:
-    """
-    Classify a review into sentiment, sub_type, and risk_level.
-
-    Raises LLMResponseParseError after one JSON retry when the model does not
-    return a JSON object. Routers should keep the review pending in that case.
-    """
-
+    """리뷰 텍스트를 감정, 세부 유형, 위험도로 분류합니다."""
     _require_review_text(review_text)
     ai_client = client or create_ai_client()
     raw = ai_client.complete_json(
@@ -46,6 +40,7 @@ def classify_review(
 
 
 def normalize_classification(raw: Mapping[str, Any]) -> ClassificationResult:
+    """모델 출력값을 허용된 enum 후보와 안전한 기본값으로 정규화합니다."""
     sentiment = str(raw.get("sentiment") or "").strip().lower()
     if sentiment not in ALLOWED_SENTIMENTS:
         sentiment = "negative"
@@ -74,5 +69,6 @@ def normalize_classification(raw: Mapping[str, Any]) -> ClassificationResult:
 
 
 def _require_review_text(review_text: str) -> None:
+    """AI 호출 전 빈 리뷰 텍스트를 차단합니다."""
     if not isinstance(review_text, str) or not review_text.strip():
         raise ValueError("review_text must not be empty")
