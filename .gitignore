@@ -1,4 +1,5 @@
 .DS_Store
+.idea/
 .env
 .venv/
 venv/
@@ -14,6 +15,7 @@ dist/
 coverage/
 playwright-report/
 test-results/
+.playwright-mcp/
 
 .chroma/
 data/mysql/
