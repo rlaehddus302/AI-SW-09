@@ -11,10 +11,14 @@ from app.models.enums import OrderType, ReviewStatus, RiskLevel, Sentiment
 
 
 def enum_values(enum_type: type) -> list[str]:
+    """SQLAlchemy Enum 컬럼에 Python Enum 값 문자열만 저장하도록 변환합니다."""
+
     return [item.value for item in enum_type]
 
 
 class Review(Base):
+    """고객 리뷰와 AI 분석/답변 생성 상태를 저장하는 ORM 모델입니다."""
+
     __tablename__ = "reviews"
     __table_args__ = (
         CheckConstraint("rating IS NULL OR (rating >= 1 AND rating <= 5)", name="ck_reviews_rating_range"),

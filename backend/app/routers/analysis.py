@@ -34,10 +34,14 @@ MAX_CONCURRENT_REVIEW_TASKS = 4
 
 
 def _task_id() -> str:
+    """클라이언트에 전달할 짧은 백그라운드 작업 id를 생성합니다."""
+
     return f"task_{uuid4().hex[:12]}"
 
 
 def _progress(current: int, total: int) -> dict[str, int]:
+    """WebSocket으로 보내는 공통 진행률 payload를 생성합니다."""
+
     return {
         "current": current,
         "total": total,
@@ -46,6 +50,8 @@ def _progress(current: int, total: int) -> dict[str, int]:
 
 
 def _enum_value(value: Any) -> Optional[str]:
+    """enum 또는 문자열 값을 일반 문자열로 바꾸고 None은 그대로 둡니다."""
+
     if value is None:
         return None
     return value.value if hasattr(value, "value") else str(value)
@@ -55,6 +61,8 @@ def determine_approval(
     risk_level: Optional[Union[RiskLevel, str]],
     sentiment: Optional[Union[Sentiment, str]],
 ) -> ReviewStatus:
+    """생성된 답변을 자동 답변 처리할지 승인 필요 상태로 둘지 결정합니다."""
+
     risk = _enum_value(risk_level)
     sent = _enum_value(sentiment)
     if risk == RiskLevel.LOW.value and sent == Sentiment.POSITIVE.value:
@@ -67,6 +75,8 @@ def determine_approval(
 
 
 def _classification_payload(result: dict[str, Any]) -> dict[str, Any]:
+    """AI 분류 결과를 DB enum 컬럼에 저장 가능한 값으로 정규화합니다."""
+
     sentiment = result.get("sentiment")
     risk_level = result.get("risk_level")
     sub_type = result.get("sub_type")
@@ -86,6 +96,8 @@ def _classification_payload(result: dict[str, Any]) -> dict[str, Any]:
 
 
 def _interpretation_payload(result: dict[str, Any]) -> dict[str, Any]:
+    """리뷰 모델에 저장하는 해석 필드만 추려냅니다."""
+
     return {
         "core_issue": result.get("core_issue"),
         "action_direction": result.get("action_direction"),
@@ -94,6 +106,8 @@ def _interpretation_payload(result: dict[str, Any]) -> dict[str, Any]:
 
 
 def _normalize_rag_references(result: Optional[list[dict[str, Any]]]) -> list[dict[str, Any]]:
+    """RAG 참고 사례를 직렬화 가능한 리뷰/답변 쌍으로 정리합니다."""
+
     references: list[dict[str, Any]] = []
     for item in result or []:
         if not isinstance(item, dict) or not item.get("review") or not item.get("reply"):
@@ -106,6 +120,8 @@ def _normalize_rag_references(result: Optional[list[dict[str, Any]]]) -> list[di
 
 
 def _call_in_thread(func, *args, **kwargs):
+    """동기 또는 비동기 AI 함수를 워커 스레드 안에서 실행합니다."""
+
     value = func(*args, **kwargs)
     if inspect.isawaitable(value):
         return asyncio.run(value)
@@ -113,6 +129,8 @@ def _call_in_thread(func, *args, **kwargs):
 
 
 async def _call_with_retry(func, *args, **kwargs):
+    """AI 단계 하나를 최대 한 번 재시도하고 이벤트 루프 블로킹을 피합니다."""
+
     last_error: Optional[Exception] = None
     for _ in range(2):
         try:
@@ -133,6 +151,8 @@ async def _broadcast_progress(
     current: int,
     total: int,
 ) -> None:
+    """리뷰 작업의 단계별 진행 이벤트를 브로드캐스트합니다."""
+
     await manager.broadcast(
         store_id,
         {
@@ -158,6 +178,8 @@ async def _broadcast_review_updated(
     total: int,
     error: Optional[str] = None,
 ) -> None:
+    """단계가 DB 데이터를 바꾼 뒤 최신 리뷰 스냅샷을 브로드캐스트합니다."""
+
     message = {
         "type": "review_updated",
         "task_id": task_id,
@@ -174,6 +196,8 @@ async def _broadcast_review_updated(
 
 
 async def _record_completion(summary: dict[str, int], lock: asyncio.Lock, *, succeeded: bool) -> int:
+    """공유 작업 카운터를 안전하게 갱신하고 완료 수를 반환합니다."""
+
     async with lock:
         summary["completed"] += 1
         if succeeded:
@@ -184,12 +208,16 @@ async def _record_completion(summary: dict[str, int], lock: asyncio.Lock, *, suc
 
 
 async def run_analysis_task(task_id: str, store_id: int, review_ids: list[int]) -> None:
+    """선택한 리뷰를 동시에 분석하고 리뷰별 변경사항을 실시간 전송합니다."""
+
     total = len(review_ids)
     summary = {"completed": 0, "success": 0, "failed": 0}
     summary_lock = asyncio.Lock()
     semaphore = asyncio.Semaphore(MAX_CONCURRENT_REVIEW_TASKS)
 
     async def process_review(review_id: int) -> None:
+        """리뷰 id 하나에 대해 분류와 해석 단계를 실행합니다."""
+
         async with semaphore:
             with SessionLocal() as db:
                 review = db.get(Review, review_id)
@@ -309,6 +337,8 @@ async def run_generation_task(
     review_ids: list[int],
     restore_status: ReviewStatus = ReviewStatus.ANALYZED,
 ) -> None:
+    """답변을 동시에 생성하고 RAG, 답변, 승인 게이트 변경사항을 실시간 전송합니다."""
+
     total = len(review_ids)
     summary = {"completed": 0, "success": 0, "failed": 0}
     summary_lock = asyncio.Lock()
@@ -318,6 +348,8 @@ async def run_generation_task(
         store_info = {"store_name": store.store_name, "origin_info": store.origin_info}
 
     async def process_review(review_id: int) -> None:
+        """리뷰 하나에 대해 RAG 검색, 답변 생성, 승인 게이트를 실행합니다."""
+
         async with semaphore:
             with SessionLocal() as db:
                 review = db.get(Review, review_id)
@@ -465,6 +497,8 @@ async def run_generation_task(
 
 
 async def save_approved_reply_task(store_id: int, review_id: int) -> None:
+    """API 응답을 막지 않고 승인된 답변을 RAG 저장소에 저장합니다."""
+
     with SessionLocal() as db:
         review = db.get(Review, review_id)
         if review is None or review.store_id != store_id or not review.reply_text:
@@ -489,6 +523,8 @@ def analyze_reviews(
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
 ) -> AnalysisTaskResponse:
+    """미분석 리뷰의 비동기 분석 작업을 시작합니다."""
+
     get_store_or_404(db, store_id)
     reviews = get_reviews_or_404(db, store_id, payload.review_ids)
     require_batch_status(reviews, {ReviewStatus.PENDING}, "분석 시작")
@@ -511,6 +547,8 @@ def generate_replies(
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
 ) -> AnalysisTaskResponse:
+    """분석 완료 리뷰의 비동기 답변 생성 작업을 시작합니다."""
+
     get_store_or_404(db, store_id)
     reviews = get_reviews_or_404(db, store_id, payload.review_ids)
     require_batch_status(reviews, {ReviewStatus.ANALYZED}, "답변 생성")
@@ -533,6 +571,8 @@ def approve_review(
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
 ) -> ActionResponse:
+    """생성된 답변을 승인하고 향후 RAG 재사용 저장을 예약합니다."""
+
     review = get_review_or_404(db, store_id, review_id)
     require_status(review, {ReviewStatus.NEEDS_APPROVAL}, "승인")
     review.status = ReviewStatus.APPROVED
@@ -543,6 +583,8 @@ def approve_review(
 
 @router.post("/{review_id}/reject", response_model=ActionResponse)
 def reject_review(store_id: int, review_id: int, db: Session = Depends(get_db)) -> ActionResponse:
+    """승인 필요 답변을 보류 상태로 바꿔 재생성할 수 있게 합니다."""
+
     review = get_review_or_404(db, store_id, review_id)
     require_status(review, {ReviewStatus.NEEDS_APPROVAL}, "반려")
     review.status = ReviewStatus.ON_HOLD
@@ -557,6 +599,8 @@ def regenerate_reply(
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
 ) -> RegenerateTaskResponse:
+    """보류된 리뷰의 답변 재생성 작업을 시작합니다."""
+
     review = get_review_or_404(db, store_id, review_id)
     require_status(review, {ReviewStatus.ON_HOLD}, "답변 재생성")
     review.status = ReviewStatus.GENERATING

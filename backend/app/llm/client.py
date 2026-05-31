@@ -1,9 +1,4 @@
-"""Upstage Solar client and deterministic mock fallback.
-
-AI_MODE policy:
-- mock: deterministic local responses; never calls external services.
-- live: real Upstage API calls; requires UPSTAGE_API_KEY.
-"""
+"""Upstage Solar 연동 클라이언트와 deterministic mock 클라이언트입니다."""
 
 from __future__ import annotations
 
@@ -23,22 +18,27 @@ DEFAULT_TIMEOUT_SECONDS = 30.0
 
 
 class LLMError(RuntimeError):
-    """Base error for LLM and embedding integration failures."""
+    """LLM/임베딩 연동 실패에서 공통으로 사용하는 기준 예외입니다."""
+    pass
 
 
 class LLMConfigurationError(LLMError):
-    """Raised when live mode is requested without required configuration."""
+    """live 모드에 필요한 설정이 없을 때 발생합니다."""
+    pass
 
 
 class LLMResponseParseError(LLMError):
-    """Raised after the configured JSON parsing retry is exhausted."""
+    """JSON 파싱 재시도까지 실패했을 때 발생합니다."""
+    pass
 
 
 class LLMTimeoutError(LLMError):
-    """Raised when an Upstage request exceeds the configured timeout."""
+    """Upstage 요청이 설정된 timeout을 넘겼을 때 발생합니다."""
+    pass
 
 
 class AIClientProtocol(Protocol):
+    """live/mock AI 클라이언트가 공통으로 만족해야 하는 최소 인터페이스입니다."""
     mode: str
 
     def complete_json(
@@ -48,9 +48,11 @@ class AIClientProtocol(Protocol):
         system_prompt: str,
         user_payload: Mapping[str, Any],
     ) -> Dict[str, Any]:
+        """LLM 작업 1건의 결과를 JSON 객체로 반환합니다."""
         ...
 
     def embed_text(self, text: str, *, purpose: str = "query") -> List[float]:
+        """검색용 query 또는 저장용 passage 텍스트 임베딩 벡터를 반환합니다."""
         ...
 
 
@@ -59,6 +61,7 @@ HttpPost = Callable[[str, Mapping[str, str], Mapping[str, Any], float], Mapping[
 
 @dataclass(frozen=True)
 class UpstageConfig:
+    """Upstage chat/embedding 호출에 필요한 런타임 설정입니다."""
     api_key: Optional[str] = None
     ai_mode: str = "mock"
     base_url: str = "https://api.upstage.ai/v1"
@@ -70,6 +73,7 @@ class UpstageConfig:
 
     @classmethod
     def from_env(cls) -> "UpstageConfig":
+        """공통 Settings 객체에서 Upstage 설정을 구성합니다."""
         from app.config import get_settings
 
         settings = get_settings()
@@ -96,6 +100,7 @@ class UpstageConfig:
 
 
 def normalize_ai_mode(mode: Optional[str]) -> str:
+    """AI_MODE 값을 mock 또는 live로 정규화하고 검증합니다."""
     normalized = (mode or "mock").strip().lower()
     if normalized not in ALLOWED_AI_MODES:
         raise ValueError(f"AI_MODE must be one of {sorted(ALLOWED_AI_MODES)}, got {mode!r}")
@@ -107,6 +112,7 @@ def create_ai_client(
     *,
     http_post: Optional[HttpPost] = None,
 ) -> AIClientProtocol:
+    """설정에 맞는 AI 클라이언트를 생성하고 live 설정 누락은 즉시 실패시킵니다."""
     config = config or UpstageConfig.from_env()
     requested_mode = normalize_ai_mode(config.ai_mode)
 
@@ -120,12 +126,7 @@ def create_ai_client(
 
 
 def parse_json_object(text: str) -> Dict[str, Any]:
-    """Parse a JSON object from a model response.
-
-    The prompt asks for JSON only, but this keeps one layer of tolerance for
-    fenced JSON blocks and accidental leading/trailing text.
-    """
-
+    """모델 응답에서 JSON 객체만 뽑아내며, 코드블록이나 앞뒤 설명도 최대한 허용합니다."""
     content = text.strip()
     if content.startswith("```"):
         content = re.sub(r"^```(?:json)?\s*", "", content, flags=re.IGNORECASE)
@@ -146,9 +147,11 @@ def parse_json_object(text: str) -> Dict[str, Any]:
 
 
 class UpstageSolarClient:
+    """Upstage chat completion과 embedding HTTP API를 호출하는 클라이언트입니다."""
     mode = "live"
 
     def __init__(self, config: UpstageConfig, http_post: Optional[HttpPost] = None):
+        """운영 코드와 테스트에서 HTTP 호출 함수를 주입할 수 있게 초기화합니다."""
         self.config = config
         self._http_post = http_post or _urllib_post_json
 
@@ -159,6 +162,7 @@ class UpstageSolarClient:
         system_prompt: str,
         user_payload: Mapping[str, Any],
     ) -> Dict[str, Any]:
+        """Upstage에 JSON 응답을 요청하고 실패 시 JSON 전용 프롬프트로 한 번 재시도합니다."""
         last_error: Optional[Exception] = None
         for attempt in range(2):
             response_text = self._complete_text(
@@ -176,6 +180,7 @@ class UpstageSolarClient:
         ) from last_error
 
     def embed_text(self, text: str, *, purpose: str = "query") -> List[float]:
+        """query/passage 목적에 맞는 임베딩 모델로 텍스트를 벡터화합니다."""
         if not text or not text.strip():
             raise ValueError("text must not be empty")
 
@@ -208,6 +213,7 @@ class UpstageSolarClient:
         user_payload: Mapping[str, Any],
         retry_json_only: bool,
     ) -> str:
+        """Chat completion 엔드포인트를 호출하고 원문 메시지 텍스트만 반환합니다."""
         system_content = system_prompt
         if retry_json_only:
             system_content = (
@@ -243,6 +249,7 @@ class UpstageSolarClient:
         return str(content)
 
     def _headers(self) -> Dict[str, str]:
+        """Upstage 요청에 필요한 인증 헤더를 구성합니다."""
         if not self.config.api_key:
             raise LLMConfigurationError("UPSTAGE_API_KEY is required for live calls")
         return {
@@ -252,6 +259,7 @@ class UpstageSolarClient:
 
 
 class DeterministicMockAIClient:
+    """테스트와 API 키 없는 로컬 데모에서 사용하는 deterministic mock 클라이언트입니다."""
     mode = "mock"
 
     def complete_json(
@@ -261,6 +269,7 @@ class DeterministicMockAIClient:
         system_prompt: str,
         user_payload: Mapping[str, Any],
     ) -> Dict[str, Any]:
+        """알려진 AI 작업명을 deterministic mock 구현으로 라우팅합니다."""
         del system_prompt
         if task == "classification":
             return _mock_classification(str(user_payload.get("review_text", "")))
@@ -279,6 +288,7 @@ class DeterministicMockAIClient:
         raise ValueError(f"unknown mock task: {task}")
 
     def embed_text(self, text: str, *, purpose: str = "query") -> List[float]:
+        """외부 호출 없이 안정적인 lexical embedding을 반환합니다."""
         del purpose
         if not text or not text.strip():
             raise ValueError("text must not be empty")
@@ -291,6 +301,7 @@ def _urllib_post_json(
     payload: Mapping[str, Any],
     timeout_seconds: float,
 ) -> Mapping[str, Any]:
+    """urllib로 JSON POST를 실행하고 HTTP/timeout 오류를 LLM 예외로 정규화합니다."""
     request = urllib.request.Request(
         url,
         data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
@@ -320,14 +331,17 @@ def _urllib_post_json(
 
 
 def _join_url(base_url: str, path: str) -> str:
+    """base URL과 path를 중복 슬래시 없이 결합합니다."""
     return f"{base_url.rstrip('/')}/{path.lstrip('/')}"
 
 
 def _as_mapping(value: Any) -> Mapping[str, Any]:
+    """Mapping 값은 그대로 반환하고 그 외 값은 빈 dict로 처리합니다."""
     return value if isinstance(value, Mapping) else {}
 
 
 def _mock_classification(review_text: str) -> Dict[str, Any]:
+    """live 스키마를 흉내 내는 키워드 기반 mock 분류 결과를 생성합니다."""
     text = review_text.lower()
 
     high_keywords = ["이물질", "머리카락", "벌레", "환불", "신고", "고소", "법적", "식중독", "욕"]
@@ -357,6 +371,7 @@ def _mock_classification(review_text: str) -> Dict[str, Any]:
 
 
 def _detect_sub_type(text: str) -> Optional[str]:
+    """한국어 키워드 그룹으로 리뷰 불만 세부 유형을 감지합니다."""
     keyword_groups = [
         ("배달지연", ["늦", "지연", "한시간", "1시간", "식었", "차갑"]),
         ("이물질", ["이물질", "머리카락", "벌레", "비닐"]),
@@ -376,6 +391,7 @@ def _mock_interpretation(
     review_text: str,
     classification: Mapping[str, Any],
 ) -> Dict[str, Any]:
+    """정규화된 분류 결과를 바탕으로 mock 해석 결과를 생성합니다."""
     del review_text
     sentiment = classification.get("sentiment")
     sub_type = classification.get("sub_type") or "기타"
@@ -416,6 +432,7 @@ def _mock_reply_generation(
     store_info: Mapping[str, Any],
     rag_references: List[Any],
 ) -> Dict[str, Any]:
+    """로컬/테스트 실행용 deterministic 답변 초안을 생성합니다."""
     del review_text, rag_references
     store_name = str(store_info.get("store_name") or "매장")
     tone = interpretation.get("reply_tone")
@@ -449,6 +466,7 @@ def _mock_reply_generation(
 
 
 def _stable_text_embedding(text: str, dimensions: int = 64) -> List[float]:
+    """RAG 테스트에서 재현 가능한 정규화 해싱 벡터를 생성합니다."""
     tokens = re.findall(r"[0-9a-zA-Z가-힣]+", text.lower())
     features: List[str] = []
     for token in tokens:

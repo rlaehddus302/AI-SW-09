@@ -1,4 +1,4 @@
-"""System prompts used by the review AI pipeline."""
+"""리뷰 AI 파이프라인에서 사용하는 시스템 프롬프트입니다."""
 
 CLASSIFICATION_SYSTEM_PROMPT = """
 당신은 음식점 리뷰 분류 전문가입니다.

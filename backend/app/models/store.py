@@ -10,6 +10,8 @@ from app.database import Base
 
 
 class Store(Base):
+    """로컬 MVP에서 관리하는 단일 음식점 가게 정보를 저장합니다."""
+
     __tablename__ = "stores"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)

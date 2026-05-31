@@ -12,6 +12,8 @@ from app.schemas.review import RagReference, ReviewDetail
 
 
 def get_store_or_404(db: Session, store_id: int) -> Store:
+    """가게를 조회하거나 API 표준 가게 404를 발생시킵니다."""
+
     store = db.get(Store, store_id)
     if store is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="가게를 찾을 수 없습니다.")
@@ -19,6 +21,8 @@ def get_store_or_404(db: Session, store_id: int) -> Store:
 
 
 def get_review_or_404(db: Session, store_id: int, review_id: int) -> Review:
+    """가게 범위 안의 리뷰 1건을 조회하거나 표준 리뷰 404를 발생시킵니다."""
+
     review = db.scalar(select(Review).where(Review.id == review_id, Review.store_id == store_id))
     if review is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="리뷰를 찾을 수 없습니다.")
@@ -26,6 +30,8 @@ def get_review_or_404(db: Session, store_id: int, review_id: int) -> Review:
 
 
 def get_reviews_or_404(db: Session, store_id: int, review_ids: list[int]) -> list[Review]:
+    """리뷰 묶음을 조회하고 요청된 id 순서를 유지합니다."""
+
     rows = db.scalars(select(Review).where(Review.store_id == store_id, Review.id.in_(review_ids))).all()
     by_id = {review.id: review for review in rows}
     missing = [review_id for review_id in review_ids if review_id not in by_id]
@@ -38,6 +44,8 @@ def get_reviews_or_404(db: Session, store_id: int, review_ids: list[int]) -> lis
 
 
 def require_status(review: Review, allowed: set[ReviewStatus], action: str) -> None:
+    """단일 리뷰 상태 전이를 검증하고 맞지 않으면 409를 발생시킵니다."""
+
     if review.status not in allowed:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -50,6 +58,8 @@ def require_status(review: Review, allowed: set[ReviewStatus], action: str) -> N
 
 
 def require_batch_status(reviews: list[Review], allowed: set[ReviewStatus], action: str) -> None:
+    """배치 상태 전이를 검증하고 잘못된 id를 409 상세에 포함합니다."""
+
     invalid = [
         {"id": review.id, "status": review.status.value}
         for review in reviews
@@ -67,6 +77,8 @@ def require_batch_status(reviews: list[Review], allowed: set[ReviewStatus], acti
 
 
 def parse_json_object(value: Optional[str]) -> Optional[dict[str, Any]]:
+    """JSON 객체 문자열을 파싱하고 비었거나 잘못된 값이면 None을 반환합니다."""
+
     if not value:
         return None
     try:
@@ -77,6 +89,8 @@ def parse_json_object(value: Optional[str]) -> Optional[dict[str, Any]]:
 
 
 def parse_rag_references(value: Optional[str]) -> list[RagReference]:
+    """저장된 RAG JSON을 검증된 응답 reference 모델로 파싱합니다."""
+
     if not value:
         return []
     try:
@@ -93,6 +107,8 @@ def parse_rag_references(value: Optional[str]) -> list[RagReference]:
 
 
 def review_detail_from_model(review: Review) -> ReviewDetail:
+    """ORM 리뷰 row를 API 상세 응답 모델로 변환합니다."""
+
     return ReviewDetail(
         id=review.id,
         store_id=review.store_id,

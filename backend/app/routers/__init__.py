@@ -1,2 +1,1 @@
-"""API router package."""
-
+"""FastAPI 라우터 패키지입니다."""

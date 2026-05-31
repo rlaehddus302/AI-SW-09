@@ -7,6 +7,8 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 class StoreBase(BaseModel):
+    """가게 생성/수정 요청에서 공통으로 사용하는 필드입니다."""
+
     store_name: str = Field(min_length=1, max_length=100)
     origin_info: Optional[str] = None
     is_dine_in: bool = False
@@ -15,14 +17,20 @@ class StoreBase(BaseModel):
 
 
 class StoreCreate(StoreBase):
+    """가게 등록 요청 스키마입니다."""
+
     pass
 
 
 class StoreUpdate(StoreBase):
+    """가게 정보 수정 요청 스키마입니다."""
+
     pass
 
 
 class StoreRead(StoreBase):
+    """가게 조회 응답 스키마입니다."""
+
     id: int
     created_at: datetime
 
