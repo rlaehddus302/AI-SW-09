@@ -10,7 +10,7 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:e2e": "VITE_DEMO_MODE=true VITE_DISABLE_WS=true playwright test"
+    "test:e2e": "VITE_DISABLE_WS=true playwright test"
   },
   "dependencies": {
     "@vitejs/plugin-react": "^5.0.0",

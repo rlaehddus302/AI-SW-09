@@ -12,7 +12,7 @@ export default defineConfig({
     video: 'on',
   },
   webServer: {
-    command: 'VITE_DEMO_MODE=true VITE_DISABLE_WS=true npm run dev -- --host 127.0.0.1 --port 4173',
+    command: 'VITE_DISABLE_WS=true npm run dev -- --host 127.0.0.1 --port 4173',
     url: 'http://127.0.0.1:4173',
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,
