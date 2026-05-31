@@ -3,6 +3,7 @@ export const API_BASE_URL =
 export const WS_BASE_URL = import.meta.env.VITE_WS_BASE_URL || 'ws://localhost:8000';
 
 const STORE_ID_KEY = 'store_id';
+export const DEMO_STORE_ID = '1';
 
 class ApiError extends Error {
   constructor(message, status) {
@@ -55,10 +56,10 @@ async function request(path, options = {}) {
 
 export const storeIdStorage = {
   get() {
-    return localStorage.getItem(STORE_ID_KEY);
+    return DEMO_STORE_ID;
   },
-  set(value) {
-    localStorage.setItem(STORE_ID_KEY, String(value));
+  set() {
+    localStorage.setItem(STORE_ID_KEY, DEMO_STORE_ID);
   },
   clear() {
     localStorage.removeItem(STORE_ID_KEY);
