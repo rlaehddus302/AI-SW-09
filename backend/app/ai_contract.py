@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import inspect
 from importlib import import_module
-from typing import Any
+from typing import Any, Optional
 
 
 class AIServiceUnavailable(RuntimeError):
@@ -40,7 +40,7 @@ async def search_rag_references(
     *,
     review_text: str,
     store_id: int,
-    sub_type: str | None,
+    sub_type: Optional[str],
     order_type: str,
     limit: int = 3,
 ) -> list[dict[str, Any]]:
@@ -79,8 +79,8 @@ async def save_approved_reply(
     review: str,
     reply: str,
     store_id: int,
-    sub_type: str | None,
-    risk_level: str | None,
+    sub_type: Optional[str],
+    risk_level: Optional[str],
     order_type: str,
 ) -> None:
     func = _load_callable("app.services.rag_service", "save_approved_reply")
