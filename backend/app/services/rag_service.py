@@ -285,7 +285,7 @@ def _reference_from_payload(payload: Mapping[str, Any], similarity: float) -> RA
         sub_type=_optional_str(payload.get("sub_type")),
         risk_level=_optional_str(payload.get("risk_level")),
         order_type=_optional_str(payload.get("order_type")),
-        similarity=round(float(similarity), 6),
+        similarity=round(max(0.0, float(similarity)), 6),
     )
 
 

@@ -13,6 +13,8 @@
 ```bash
 cp .env.example .env
 docker compose up -d mysql
+# 또는 Docker Compose 플러그인이 없는 환경:
+docker-compose up -d mysql
 ```
 
 백엔드와 프론트엔드는 각각 하위 디렉터리에서 의존성을 설치한 뒤 실행합니다.
@@ -32,6 +34,19 @@ npm run dev
 ```
 
 기본 접속 주소는 `http://localhost:5173`입니다.
+
+## 검증
+
+```bash
+PYTHONPATH=backend python -m pytest backend/tests tests -q
+cd frontend
+npm run lint
+npm test
+npm run build
+npm run test:e2e
+```
+
+Docker Desktop 또는 Docker daemon이 실행 중이어야 MySQL 컨테이너 기반 데모를 확인할 수 있습니다. API 키가 없으면 `.env`의 `AI_MODE=auto` 설정으로 mock AI가 사용됩니다.
 
 ## Gitflow
 
