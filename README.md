@@ -85,6 +85,227 @@ npm run dev
 5. 프론트 실시간 반영
    `frontend/src/hooks/useWebSocket.js`는 WebSocket 메시지를 순서가 있는 큐로 보관합니다. `DashboardPage`는 도착한 메시지를 모두 처리해 리뷰 목록, 상세, 통계, 작업 상태를 즉시 갱신합니다.
 
+## 백엔드 아키텍처
+
+### 전체 레이어 구조
+
+```mermaid
+graph TB
+    subgraph Client
+        FE["Frontend - React"]
+        WS_CLIENT["WebSocket Client"]
+    end
+
+    subgraph FastAPI_App["FastAPI Application"]
+        CORS["CORS Middleware"]
+        HEALTH["GET /health"]
+        WS_EP["WS /ws/store_id"]
+
+        subgraph Routers
+            R_STORES["stores.router"]
+            R_REVIEWS["reviews.router"]
+            R_ANALYSIS["analysis.router"]
+        end
+    end
+
+    subgraph Services["Service Layer"]
+        AI_CONTRACT["ai_contract.py - Facade"]
+        SVC_CLASS["classification.py"]
+        SVC_INTERP["interpretation.py"]
+        SVC_RAG["rag_service.py"]
+        SVC_REPLY["reply_generation.py"]
+    end
+
+    subgraph Infra["Infrastructure"]
+        DB["SQLite / MySQL"]
+        CHROMA["ChromaDB - Vector Store"]
+        LLM["LLM Client - OpenAI API"]
+        WS_MGR["WebSocketManager"]
+    end
+
+    FE -->|HTTP REST| CORS --> Routers
+    WS_CLIENT -->|WebSocket| WS_EP --> WS_MGR
+
+    R_ANALYSIS -->|BackgroundTasks| AI_CONTRACT
+    AI_CONTRACT --> SVC_CLASS
+    AI_CONTRACT --> SVC_INTERP
+    AI_CONTRACT --> SVC_RAG
+    AI_CONTRACT --> SVC_REPLY
+
+    SVC_CLASS --> LLM
+    SVC_INTERP --> LLM
+    SVC_REPLY --> LLM
+    SVC_RAG --> CHROMA
+    SVC_RAG --> LLM
+
+    Routers --> DB
+    AI_CONTRACT -.->|save_approved_reply| CHROMA
+    WS_MGR -.->|실시간 진행률| WS_CLIENT
+```
+
+### 리뷰 상태 전이
+
+```mermaid
+stateDiagram-v2
+    [*] --> PENDING: 리뷰 생성
+
+    PENDING --> ANALYZING: POST /analyze
+    ANALYZING --> ANALYZED: 분류 + 해석 성공
+    ANALYZING --> PENDING: 분석 실패
+
+    ANALYZED --> GENERATING: POST /generate-replies
+    GENERATING --> NEEDS_APPROVAL: 위험도 medium/high
+    GENERATING --> AUTO_REPLIED: 위험도 low + 긍정
+    GENERATING --> ANALYZED: 생성 실패
+
+    NEEDS_APPROVAL --> APPROVED: POST /approve
+    NEEDS_APPROVAL --> ON_HOLD: POST /reject
+
+    ON_HOLD --> GENERATING: POST /regenerate
+
+    APPROVED --> [*]
+    AUTO_REPLIED --> [*]
+```
+
+### 분석 파이프라인
+
+`POST /api/v1/stores/{store_id}/reviews/analyze` 호출 시:
+
+```mermaid
+sequenceDiagram
+    actor Client as 프론트엔드
+    participant API as POST /analyze
+    participant BG as BackgroundTask
+    participant WS as WebSocket
+    participant AI as ai_contract
+    participant CLS as classification
+    participant INT as interpretation
+    participant DB as Database
+
+    Client->>API: review_ids 전송
+    API->>DB: 상태를 ANALYZING으로 변경
+    API-->>Client: 202 Accepted (task_id)
+
+    loop 각 리뷰 (최대 4개 동시)
+        BG->>WS: classification started
+        BG->>AI: classify_review(review_text)
+        AI->>CLS: classify_review()
+        CLS-->>AI: sentiment, risk_level, sub_type
+        BG->>DB: 분류 결과 저장
+        BG->>WS: classification completed
+
+        BG->>WS: interpretation started
+        BG->>AI: interpret_review(text, classification)
+        AI->>INT: interpret_review()
+        INT-->>AI: core_issue, action_direction, reply_tone
+        BG->>DB: 해석 결과 저장, 상태를 ANALYZED로 변경
+        BG->>WS: analysis completed
+    end
+
+    BG->>WS: task_complete
+```
+
+### 답변 생성 파이프라인
+
+`POST /api/v1/stores/{store_id}/reviews/generate-replies` 호출 시:
+
+```mermaid
+sequenceDiagram
+    actor Client as 프론트엔드
+    participant API as POST /generate-replies
+    participant BG as BackgroundTask
+    participant WS as WebSocket
+    participant AI as ai_contract
+    participant RAG as rag_service
+    participant GEN as reply_generation
+    participant DB as Database
+    participant CHROMA as ChromaDB
+
+    Client->>API: review_ids 전송
+    API->>DB: 상태를 GENERATING으로 변경
+    API-->>Client: 202 Accepted (task_id)
+
+    loop 각 리뷰 (최대 4개 동시)
+        BG->>WS: rag_search started
+        BG->>AI: search_rag_references()
+        AI->>RAG: search_similar_reviews()
+        RAG->>CHROMA: 유사도 검색
+        CHROMA-->>RAG: 유사 리뷰-답변 쌍
+        BG->>DB: rag_references 저장
+        BG->>WS: rag_search completed
+
+        BG->>WS: reply_generation started
+        BG->>AI: generate_reply()
+        AI->>GEN: generate_reply()
+        GEN-->>AI: reply_text
+        BG->>DB: reply_text 저장
+        BG->>WS: reply_generation completed
+
+        BG->>WS: approval_gate started
+        alt LOW 위험도 + POSITIVE 감정
+            BG->>DB: 상태를 AUTO_REPLIED로 변경
+        else MEDIUM/HIGH 또는 MALICIOUS
+            BG->>DB: 상태를 NEEDS_APPROVAL로 변경
+        end
+        BG->>WS: generation completed
+    end
+
+    BG->>WS: task_complete
+```
+
+### 승인 / 반려 / 재생성
+
+```mermaid
+sequenceDiagram
+    actor Client as 프론트엔드
+    participant API as Analysis Router
+    participant DB as Database
+    participant BG as BackgroundTask
+    participant RAG as rag_service
+    participant CHROMA as ChromaDB
+    participant WS as WebSocket
+
+    Note over Client,API: 승인
+    Client->>API: POST /approve
+    API->>DB: 상태를 APPROVED로 변경
+    API-->>Client: ActionResponse
+    API->>BG: save_approved_reply_task
+    BG->>RAG: save_approved_reply()
+    RAG->>CHROMA: 리뷰-답변 쌍 임베딩 저장
+
+    Note over Client,API: 반려
+    Client->>API: POST /reject
+    API->>DB: 상태를 ON_HOLD로 변경
+    API-->>Client: ActionResponse
+
+    Note over Client,API: 재생성
+    Client->>API: POST /regenerate
+    API->>DB: 상태를 GENERATING으로 변경
+    API-->>Client: 202 Accepted
+    API->>BG: run_generation_task
+    BG->>WS: rag_search, reply_generation, approval_gate
+    BG->>DB: 상태 업데이트
+    BG->>WS: task_complete
+```
+
+### API 엔드포인트
+
+| Method | Endpoint | 설명 |
+|--------|----------|------|
+| `GET` | `/health` | 서버 상태 확인 |
+| `WS` | `/ws/{store_id}` | 실시간 진행률 WebSocket |
+| `POST` | `/api/v1/stores` | 가게 생성/갱신 |
+| `GET` | `/api/v1/stores/{id}` | 가게 조회 |
+| `PUT` | `/api/v1/stores/{id}` | 가게 수정 |
+| `GET` | `/api/v1/stores/{id}/reviews` | 리뷰 목록 (필터+페이징) |
+| `GET` | `/api/v1/stores/{id}/reviews/stats` | 리뷰 통계 집계 |
+| `GET` | `/api/v1/stores/{id}/reviews/{rid}` | 리뷰 상세 |
+| `POST` | `/api/v1/stores/{id}/reviews/analyze` | 배치 분석 시작 (비동기) |
+| `POST` | `/api/v1/stores/{id}/reviews/generate-replies` | 배치 답변 생성 (비동기) |
+| `POST` | `/api/v1/stores/{id}/reviews/{rid}/approve` | 답변 승인 |
+| `POST` | `/api/v1/stores/{id}/reviews/{rid}/reject` | 답변 반려 |
+| `POST` | `/api/v1/stores/{id}/reviews/{rid}/regenerate` | 답변 재생성 (비동기) |
+
 ## 검증
 
 백엔드:
