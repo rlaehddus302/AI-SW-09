@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+import logging
 from contextlib import asynccontextmanager
 from typing import Optional
 
@@ -13,19 +15,33 @@ from app.routers import analysis, reviews, stores
 from app.seed.seeder import seed_database, seed_rag_if_enabled
 from app.websocket import manager
 
+logger = logging.getLogger(__name__)
+
+
+async def seed_rag_after_startup(store_id: int) -> None:
+    try:
+        await asyncio.to_thread(lambda: asyncio.run(seed_rag_if_enabled(store_id)))
+    except Exception:
+        logger.exception("RAG seed failed after startup")
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     settings = get_settings()
     seeded_store_id: Optional[int] = None
-    if settings.create_tables_on_startup:
+    if settings.reset_database_on_startup:
+        Base.metadata.drop_all(bind=engine)
+        Base.metadata.create_all(bind=engine)
+    elif settings.create_tables_on_startup:
         Base.metadata.create_all(bind=engine)
     if settings.seed_on_startup:
         with SessionLocal() as db:
             store = seed_database(db)
             seeded_store_id = store.id
     if seeded_store_id is not None:
-        await seed_rag_if_enabled(seeded_store_id)
+        # RAG seeding may call the live embedding API. Keep server readiness independent
+        # from external AI latency or failures.
+        asyncio.create_task(seed_rag_after_startup(seeded_store_id))
     yield
 
 

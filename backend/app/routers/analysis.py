@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+import inspect
 import json
 from typing import Any, Optional, Union
 from uuid import uuid4
@@ -17,6 +19,7 @@ from app.routers.utils import (
     parse_json_object,
     require_batch_status,
     require_status,
+    review_detail_from_model,
 )
 from app.schemas.review import (
     ActionResponse,
@@ -27,6 +30,7 @@ from app.schemas.review import (
 from app.websocket import manager
 
 router = APIRouter(prefix="/stores/{store_id}/reviews", tags=["analysis"])
+MAX_CONCURRENT_REVIEW_TASKS = 4
 
 
 def _task_id() -> str:
@@ -101,11 +105,18 @@ def _normalize_rag_references(result: Optional[list[dict[str, Any]]]) -> list[di
     return references
 
 
+def _call_in_thread(func, *args, **kwargs):
+    value = func(*args, **kwargs)
+    if inspect.isawaitable(value):
+        return asyncio.run(value)
+    return value
+
+
 async def _call_with_retry(func, *args, **kwargs):
     last_error: Optional[Exception] = None
     for _ in range(2):
         try:
-            return await func(*args, **kwargs)
+            return await asyncio.to_thread(_call_in_thread, func, *args, **kwargs)
         except Exception as exc:  # noqa: BLE001 - task error is reported through WebSocket.
             last_error = exc
     raise last_error or RuntimeError("AI task failed")
@@ -135,92 +146,152 @@ async def _broadcast_progress(
     )
 
 
-async def run_analysis_task(task_id: str, store_id: int, review_ids: list[int]) -> None:
-    success = 0
-    failed = 0
-    total = len(review_ids)
-    with SessionLocal() as db:
-        for index, review_id in enumerate(review_ids, start=1):
-            review = db.get(Review, review_id)
-            if review is None or review.store_id != store_id:
-                failed += 1
-                continue
-            try:
-                await _broadcast_progress(
-                    store_id,
-                    message_type="analysis_progress",
-                    task_id=task_id,
-                    review_id=review.id,
-                    step="classification",
-                    step_status="started",
-                    current=index,
-                    total=total,
-                )
-                raw_classification = await _call_with_retry(ai_contract.classify_review, review.review_text)
-                classification = _classification_payload(raw_classification)
-                review.sentiment = Sentiment(classification["sentiment"])
-                review.sub_type = classification["sub_type"]
-                review.risk_level = RiskLevel(classification["risk_level"])
-                db.commit()
-                await _broadcast_progress(
-                    store_id,
-                    message_type="analysis_progress",
-                    task_id=task_id,
-                    review_id=review.id,
-                    step="classification",
-                    step_status="completed",
-                    current=index,
-                    total=total,
-                )
+async def _broadcast_review_updated(
+    store_id: int,
+    *,
+    task_id: str,
+    review: Review,
+    event: str,
+    step: str,
+    step_status: str,
+    current: int,
+    total: int,
+    error: Optional[str] = None,
+) -> None:
+    message = {
+        "type": "review_updated",
+        "task_id": task_id,
+        "event": event,
+        "step": step,
+        "status": step_status,
+        "review_id": review.id,
+        "review": review_detail_from_model(review).model_dump(mode="json"),
+        "progress": _progress(current, total),
+    }
+    if error:
+        message["error"] = error
+    await manager.broadcast(store_id, message)
 
-                await _broadcast_progress(
-                    store_id,
-                    message_type="analysis_progress",
-                    task_id=task_id,
-                    review_id=review.id,
-                    step="interpretation",
-                    step_status="started",
-                    current=index,
-                    total=total,
-                )
-                raw_interpretation = await _call_with_retry(
-                    ai_contract.interpret_review,
-                    review.review_text,
-                    classification,
-                )
-                interpretation = _interpretation_payload(raw_interpretation)
-                review.interpretation = json.dumps(interpretation, ensure_ascii=False)
-                review.reply_tone = interpretation.get("reply_tone")
-                review.status = ReviewStatus.ANALYZED
-                db.commit()
-                success += 1
-                await _broadcast_progress(
-                    store_id,
-                    message_type="analysis_progress",
-                    task_id=task_id,
-                    review_id=review.id,
-                    step="interpretation",
-                    step_status="completed",
-                    current=index,
-                    total=total,
-                )
-            except Exception as exc:  # noqa: BLE001 - task error is reported through WebSocket.
-                db.rollback()
+
+async def _record_completion(summary: dict[str, int], lock: asyncio.Lock, *, succeeded: bool) -> int:
+    async with lock:
+        summary["completed"] += 1
+        if succeeded:
+            summary["success"] += 1
+        else:
+            summary["failed"] += 1
+        return summary["completed"]
+
+
+async def run_analysis_task(task_id: str, store_id: int, review_ids: list[int]) -> None:
+    total = len(review_ids)
+    summary = {"completed": 0, "success": 0, "failed": 0}
+    summary_lock = asyncio.Lock()
+    semaphore = asyncio.Semaphore(MAX_CONCURRENT_REVIEW_TASKS)
+
+    async def process_review(review_id: int) -> None:
+        async with semaphore:
+            with SessionLocal() as db:
                 review = db.get(Review, review_id)
-                if review is not None:
-                    review.status = ReviewStatus.PENDING
+                if review is None or review.store_id != store_id:
+                    await _record_completion(summary, summary_lock, succeeded=False)
+                    return
+                try:
+                    await _broadcast_progress(
+                        store_id,
+                        message_type="analysis_progress",
+                        task_id=task_id,
+                        review_id=review.id,
+                        step="classification",
+                        step_status="started",
+                        current=summary["completed"],
+                        total=total,
+                    )
+                    raw_classification = await _call_with_retry(ai_contract.classify_review, review.review_text)
+                    classification = _classification_payload(raw_classification)
+                    review.sentiment = Sentiment(classification["sentiment"])
+                    review.sub_type = classification["sub_type"]
+                    review.risk_level = RiskLevel(classification["risk_level"])
                     db.commit()
-                failed += 1
-                await manager.broadcast(
-                    store_id,
-                    {
-                        "type": "error",
-                        "task_id": task_id,
-                        "review_id": review_id,
-                        "error": str(exc),
-                        "fallback_action": "status를 pending으로 되돌렸습니다.",
-                    },
-                )
+                    db.refresh(review)
+                    await _broadcast_review_updated(
+                        store_id,
+                        task_id=task_id,
+                        review=review,
+                        event="classification_completed",
+                        step="classification",
+                        step_status="completed",
+                        current=summary["completed"],
+                        total=total,
+                    )
+
+                    await _broadcast_progress(
+                        store_id,
+                        message_type="analysis_progress",
+                        task_id=task_id,
+                        review_id=review.id,
+                        step="interpretation",
+                        step_status="started",
+                        current=summary["completed"],
+                        total=total,
+                    )
+                    raw_interpretation = await _call_with_retry(
+                        ai_contract.interpret_review,
+                        review.review_text,
+                        classification,
+                    )
+                    interpretation = _interpretation_payload(raw_interpretation)
+                    review.interpretation = json.dumps(interpretation, ensure_ascii=False)
+                    review.reply_tone = interpretation.get("reply_tone")
+                    review.status = ReviewStatus.ANALYZED
+                    db.commit()
+                    db.refresh(review)
+                    current = await _record_completion(summary, summary_lock, succeeded=True)
+                    await _broadcast_review_updated(
+                        store_id,
+                        task_id=task_id,
+                        review=review,
+                        event="analysis_completed",
+                        step="interpretation",
+                        step_status="completed",
+                        current=current,
+                        total=total,
+                    )
+                except Exception as exc:  # noqa: BLE001 - task error is reported through WebSocket.
+                    db.rollback()
+                    review = db.get(Review, review_id)
+                    current = await _record_completion(summary, summary_lock, succeeded=False)
+                    if review is not None:
+                        review.status = ReviewStatus.PENDING
+                        db.commit()
+                        db.refresh(review)
+                        await _broadcast_review_updated(
+                            store_id,
+                            task_id=task_id,
+                            review=review,
+                            event="analysis_failed",
+                            step="analysis",
+                            step_status="failed",
+                            current=current,
+                            total=total,
+                            error=str(exc),
+                        )
+                    await manager.broadcast(
+                        store_id,
+                        {
+                            "type": "error",
+                            "task_id": task_id,
+                            "review_id": review_id,
+                            "error": str(exc),
+                            "fallback_action": "status를 pending으로 되돌렸습니다.",
+                        },
+                    )
+
+    await asyncio.gather(*(process_review(review_id) for review_id in review_ids))
+
+    async with summary_lock:
+        success = summary["success"]
+        failed = summary["failed"]
     await manager.broadcast(
         store_id,
         {
@@ -238,124 +309,150 @@ async def run_generation_task(
     review_ids: list[int],
     restore_status: ReviewStatus = ReviewStatus.ANALYZED,
 ) -> None:
-    success = 0
-    failed = 0
     total = len(review_ids)
+    summary = {"completed": 0, "success": 0, "failed": 0}
+    summary_lock = asyncio.Lock()
+    semaphore = asyncio.Semaphore(MAX_CONCURRENT_REVIEW_TASKS)
     with SessionLocal() as db:
         store = get_store_or_404(db, store_id)
-        for index, review_id in enumerate(review_ids, start=1):
-            review = db.get(Review, review_id)
-            if review is None or review.store_id != store_id:
-                failed += 1
-                continue
-            try:
-                await _broadcast_progress(
-                    store_id,
-                    message_type="generation_progress",
-                    task_id=task_id,
-                    review_id=review.id,
-                    step="rag_search",
-                    step_status="started",
-                    current=index,
-                    total=total,
-                )
-                rag_references = _normalize_rag_references(
-                    await ai_contract.search_rag_references(
-                        review_text=review.review_text,
-                        store_id=store_id,
-                        sub_type=review.sub_type,
-                        order_type=review.order_type.value,
-                        limit=3,
-                    )
-                )
-                review.rag_references = json.dumps(rag_references, ensure_ascii=False)
-                db.commit()
-                await _broadcast_progress(
-                    store_id,
-                    message_type="generation_progress",
-                    task_id=task_id,
-                    review_id=review.id,
-                    step="rag_search",
-                    step_status="completed",
-                    current=index,
-                    total=total,
-                )
+        store_info = {"store_name": store.store_name, "origin_info": store.origin_info}
 
-                await _broadcast_progress(
-                    store_id,
-                    message_type="generation_progress",
-                    task_id=task_id,
-                    review_id=review.id,
-                    step="reply_generation",
-                    step_status="started",
-                    current=index,
-                    total=total,
-                )
-                raw_reply = await _call_with_retry(
-                    ai_contract.generate_reply,
-                    review_text=review.review_text,
-                    interpretation=parse_json_object(review.interpretation) or {},
-                    store_info={"store_name": store.store_name, "origin_info": store.origin_info},
-                    rag_references=rag_references,
-                )
-                reply_text = raw_reply.get("reply_text") if isinstance(raw_reply, dict) else None
-                if not reply_text:
-                    raise ValueError("reply_text is empty")
-                review.reply_text = str(reply_text)[:500]
-                db.commit()
-                await _broadcast_progress(
-                    store_id,
-                    message_type="generation_progress",
-                    task_id=task_id,
-                    review_id=review.id,
-                    step="reply_generation",
-                    step_status="completed",
-                    current=index,
-                    total=total,
-                )
-
-                await _broadcast_progress(
-                    store_id,
-                    message_type="generation_progress",
-                    task_id=task_id,
-                    review_id=review.id,
-                    step="approval_gate",
-                    step_status="started",
-                    current=index,
-                    total=total,
-                )
-                review.status = determine_approval(review.risk_level, review.sentiment)
-                db.commit()
-                success += 1
-                await _broadcast_progress(
-                    store_id,
-                    message_type="generation_progress",
-                    task_id=task_id,
-                    review_id=review.id,
-                    step="approval_gate",
-                    step_status="completed",
-                    current=index,
-                    total=total,
-                )
-            except Exception as exc:  # noqa: BLE001 - task error is reported through WebSocket.
-                db.rollback()
+    async def process_review(review_id: int) -> None:
+        async with semaphore:
+            with SessionLocal() as db:
                 review = db.get(Review, review_id)
-                if review is not None:
-                    review.status = restore_status
-                    if restore_status == ReviewStatus.ANALYZED:
-                        review.reply_text = review.reply_text or ""
+                if review is None or review.store_id != store_id:
+                    await _record_completion(summary, summary_lock, succeeded=False)
+                    return
+                try:
+                    await _broadcast_progress(
+                        store_id,
+                        message_type="generation_progress",
+                        task_id=task_id,
+                        review_id=review.id,
+                        step="rag_search",
+                        step_status="started",
+                        current=summary["completed"],
+                        total=total,
+                    )
+                    rag_references = _normalize_rag_references(
+                        await _call_with_retry(
+                            ai_contract.search_rag_references,
+                            review_text=review.review_text,
+                            store_id=store_id,
+                            sub_type=review.sub_type,
+                            order_type=review.order_type.value,
+                            limit=3,
+                        )
+                    )
+                    review.rag_references = json.dumps(rag_references, ensure_ascii=False)
                     db.commit()
-                failed += 1
-                await manager.broadcast(
-                    store_id,
-                    {
-                        "type": "error",
-                        "task_id": task_id,
-                        "review_id": review_id,
-                        "error": str(exc),
-                        "fallback_action": f"status를 {restore_status.value}로 되돌렸습니다.",
-                    },
-                )
+                    db.refresh(review)
+                    await _broadcast_review_updated(
+                        store_id,
+                        task_id=task_id,
+                        review=review,
+                        event="rag_search_completed",
+                        step="rag_search",
+                        step_status="completed",
+                        current=summary["completed"],
+                        total=total,
+                    )
+
+                    await _broadcast_progress(
+                        store_id,
+                        message_type="generation_progress",
+                        task_id=task_id,
+                        review_id=review.id,
+                        step="reply_generation",
+                        step_status="started",
+                        current=summary["completed"],
+                        total=total,
+                    )
+                    raw_reply = await _call_with_retry(
+                        ai_contract.generate_reply,
+                        review_text=review.review_text,
+                        interpretation=parse_json_object(review.interpretation) or {},
+                        store_info=store_info,
+                        rag_references=rag_references,
+                    )
+                    reply_text = raw_reply.get("reply_text") if isinstance(raw_reply, dict) else None
+                    if not reply_text:
+                        raise ValueError("reply_text is empty")
+                    review.reply_text = str(reply_text)[:500]
+                    db.commit()
+                    db.refresh(review)
+                    await _broadcast_review_updated(
+                        store_id,
+                        task_id=task_id,
+                        review=review,
+                        event="reply_generation_completed",
+                        step="reply_generation",
+                        step_status="completed",
+                        current=summary["completed"],
+                        total=total,
+                    )
+
+                    await _broadcast_progress(
+                        store_id,
+                        message_type="generation_progress",
+                        task_id=task_id,
+                        review_id=review.id,
+                        step="approval_gate",
+                        step_status="started",
+                        current=summary["completed"],
+                        total=total,
+                    )
+                    review.status = determine_approval(review.risk_level, review.sentiment)
+                    db.commit()
+                    db.refresh(review)
+                    current = await _record_completion(summary, summary_lock, succeeded=True)
+                    await _broadcast_review_updated(
+                        store_id,
+                        task_id=task_id,
+                        review=review,
+                        event="generation_completed",
+                        step="approval_gate",
+                        step_status="completed",
+                        current=current,
+                        total=total,
+                    )
+                except Exception as exc:  # noqa: BLE001 - task error is reported through WebSocket.
+                    db.rollback()
+                    review = db.get(Review, review_id)
+                    current = await _record_completion(summary, summary_lock, succeeded=False)
+                    if review is not None:
+                        review.status = restore_status
+                        if restore_status == ReviewStatus.ANALYZED:
+                            review.reply_text = review.reply_text or ""
+                        db.commit()
+                        db.refresh(review)
+                        await _broadcast_review_updated(
+                            store_id,
+                            task_id=task_id,
+                            review=review,
+                            event="generation_failed",
+                            step="generation",
+                            step_status="failed",
+                            current=current,
+                            total=total,
+                            error=str(exc),
+                        )
+                    await manager.broadcast(
+                        store_id,
+                        {
+                            "type": "error",
+                            "task_id": task_id,
+                            "review_id": review_id,
+                            "error": str(exc),
+                            "fallback_action": f"status를 {restore_status.value}로 되돌렸습니다.",
+                        },
+                    )
+    await asyncio.gather(*(process_review(review_id) for review_id in review_ids))
+
+    async with summary_lock:
+        success = summary["success"]
+        failed = summary["failed"]
     await manager.broadcast(
         store_id,
         {

@@ -11,6 +11,18 @@ from .approval_gate import determine_approval
 from .interpretation import normalize_interpretation
 from .rag_service import RAGService
 
+REPLY_TEXT_KEYS = ("reply_text", "reply", "answer", "response", "message", "content")
+
+
+def extract_reply_text(raw: Mapping[str, Any]) -> str:
+    """Extract reply text from the strict schema, with aliases for live model drift."""
+
+    for key in REPLY_TEXT_KEYS:
+        value = raw.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()[:500]
+    return ""
+
 
 def generate_reply(
     review_text: str,
@@ -46,15 +58,17 @@ def generate_reply(
                 "interpretation": normalized_interpretation,
                 "store_info": dict(store_info),
                 "rag_references": references,
+                "output_schema": {"reply_text": "string, 1~500 chars"},
             },
         )
-    except LLMResponseParseError:
-        return ReplyGenerationResult(
-            reply_text="",
-            rag_references=references,
-        ).to_dict()
+    except LLMResponseParseError as exc:
+        raise ValueError("reply generation response must be JSON with non-empty reply_text") from exc
 
-    reply_text = str(raw.get("reply_text") or "").strip()[:500]
+    reply_text = extract_reply_text(raw)
+    if not reply_text:
+        raise ValueError(
+            f"reply generation response must include non-empty reply_text; keys={sorted(raw.keys())}"
+        )
     return ReplyGenerationResult(
         reply_text=reply_text,
         rag_references=references,

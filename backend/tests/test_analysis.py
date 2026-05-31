@@ -124,3 +124,45 @@ def test_background_tasks_persist_analysis_and_generation(seeded_store, monkeypa
         assert review.status == ReviewStatus.AUTO_REPLIED
         assert review.reply_text == "방문해 주셔서 감사합니다."
         assert "맛있어요" in review.rag_references
+
+
+def test_analysis_task_broadcasts_each_review_as_it_finishes(seeded_store, monkeypatch):
+    async def fake_classify_review(review_text: str):
+        if "분석 대기" in review_text:
+            await asyncio.sleep(0.03)
+        return {"sentiment": "negative", "sub_type": "기타", "risk_level": "medium"}
+
+    async def fake_interpret_review(review_text: str, classification):
+        return {
+            "core_issue": review_text,
+            "action_direction": "개별 처리",
+            "reply_tone": "사과",
+        }
+
+    messages = []
+
+    async def fake_broadcast(store_id: int, message: dict):
+        messages.append(message)
+
+    with SessionLocal() as db:
+        review = db.get(Review, 3)
+        review.status = ReviewStatus.PENDING
+        db.commit()
+
+    monkeypatch.setattr(ai_contract, "classify_review", fake_classify_review)
+    monkeypatch.setattr(ai_contract, "interpret_review", fake_interpret_review)
+    monkeypatch.setattr(analysis.manager, "broadcast", fake_broadcast)
+
+    asyncio.run(analysis.run_analysis_task("task_realtime", seeded_store, [2, 3]))
+
+    completed_updates = [
+        message
+        for message in messages
+        if message.get("type") == "review_updated" and message.get("event") == "analysis_completed"
+    ]
+    assert len(completed_updates) == 2
+    assert completed_updates[0]["review_id"] == 3
+    assert completed_updates[0]["review"]["status"] == "analyzed"
+    assert completed_updates[0]["progress"]["current"] == 1
+    assert completed_updates[1]["progress"]["current"] == 2
+    assert messages[-1]["type"] == "task_complete"

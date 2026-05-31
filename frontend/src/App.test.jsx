@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import App from './App';
@@ -95,7 +95,19 @@ function mockApi() {
       if (method === 'GET' && path === '/stores/1') return jsonResponse(store);
       if (method === 'GET' && path === '/stores/1/reviews/stats') return jsonResponse(stats);
       if (method === 'GET' && path === '/stores/1/reviews') {
-        return jsonResponse({ total: reviews.length, page: 1, size: 50, reviews });
+        const size = Number(url.searchParams.get('size') || '20');
+        if (size > 100) {
+          return jsonResponse({
+            detail: [
+              {
+                loc: ['query', 'size'],
+                msg: 'Input should be less than or equal to 100',
+                type: 'less_than_equal',
+              },
+            ],
+          }, 422);
+        }
+        return jsonResponse({ total: reviews.length, page: 1, size, reviews });
       }
       if (method === 'GET' && path === '/stores/1/reviews/1') return jsonResponse(reviews[0]);
       if (method === 'GET' && path === '/stores/1/reviews/2') return jsonResponse(reviews[1]);
@@ -115,9 +127,28 @@ function mockOfflineApi() {
   vi.stubGlobal('fetch', vi.fn(() => Promise.reject(new TypeError('offline'))));
 }
 
+class MockWebSocket {
+  static instances = [];
+
+  constructor(url) {
+    this.url = url;
+    MockWebSocket.instances.push(this);
+    setTimeout(() => this.onopen?.(), 0);
+  }
+
+  emit(message) {
+    this.onmessage?.({ data: JSON.stringify(message) });
+  }
+
+  close() {
+    this.onclose?.();
+  }
+}
+
 describe('Review helper SPA', () => {
   afterEach(() => {
     vi.unstubAllGlobals();
+    MockWebSocket.instances = [];
     window.history.pushState({}, '', '/');
   });
 
@@ -169,11 +200,137 @@ describe('Review helper SPA', () => {
     render(<App />);
 
     expect(await screen.findByRole('heading', { name: '민트치킨 성수점' })).toBeInTheDocument();
+    const reviewRequestCountBefore = fetch.mock.calls
+      .map(([input, options = {}]) => ({ url: new URL(String(input)), method: options.method || 'GET' }))
+      .filter(({ url, method }) => method === 'GET' && url.pathname === '/api/v1/stores/1/reviews')
+      .length;
+
     await user.click(screen.getByRole('button', { name: /전체 선택/ }));
     await user.click(screen.getByRole('button', { name: /분석 시작/ }));
 
     await waitFor(() => {
       expect(screen.getByText('분석이 시작되었습니다. WebSocket으로 진행 상황을 확인하세요.')).toBeInTheDocument();
     });
+
+    const reviewRequestCountAfter = fetch.mock.calls
+      .map(([input, options = {}]) => ({ url: new URL(String(input)), method: options.method || 'GET' }))
+      .filter(({ url, method }) => method === 'GET' && url.pathname === '/api/v1/stores/1/reviews')
+      .length;
+    expect(reviewRequestCountAfter).toBe(reviewRequestCountBefore);
+  });
+
+  test('dashboard requests review pages within backend validation limit', async () => {
+    mockApi();
+    localStorage.setItem('store_id', '3');
+    window.history.pushState({}, '', '/dashboard');
+
+    render(<App />);
+
+    expect(await screen.findByRole('heading', { name: '민트치킨 성수점' })).toBeInTheDocument();
+
+    const reviewRequests = fetch.mock.calls
+      .map(([input]) => new URL(String(input)))
+      .filter((url) => url.pathname === '/api/v1/stores/1/reviews');
+
+    expect(reviewRequests.length).toBeGreaterThan(0);
+    expect(fetch.mock.calls.some(([input]) => String(input).includes('/stores/3'))).toBe(false);
+    expect(reviewRequests.every((url) => Number(url.searchParams.get('size') || '20') <= 100)).toBe(
+      true,
+    );
+  });
+
+  test('dashboard applies review updates from websocket immediately', async () => {
+    mockApi();
+    vi.stubGlobal('WebSocket', MockWebSocket);
+    localStorage.setItem('store_id', '1');
+    window.history.pushState({}, '', '/dashboard');
+
+    render(<App />);
+
+    expect(await screen.findByRole('heading', { name: '민트치킨 성수점' })).toBeInTheDocument();
+    await waitFor(() => expect(MockWebSocket.instances.length).toBeGreaterThan(0));
+
+    act(() => {
+      MockWebSocket.instances[0].emit({
+        type: 'review_updated',
+        event: 'analysis_completed',
+        review: {
+          ...reviews[1],
+          status: 'analyzed',
+          reply_text: null,
+          updated_at: '2026-05-31T12:20:00',
+        },
+        progress: { current: 1, total: 2, percentage: 50 },
+      });
+    });
+
+    await waitFor(() => {
+      expect(screen.getAllByText('분석완료').length).toBeGreaterThan(1);
+    });
+  });
+
+  test('dashboard deduplicates task progress activity and logs only final review updates', async () => {
+    mockApi();
+    vi.stubGlobal('WebSocket', MockWebSocket);
+    localStorage.setItem('store_id', '1');
+    window.history.pushState({}, '', '/dashboard');
+
+    render(<App />);
+
+    expect(await screen.findByRole('heading', { name: '민트치킨 성수점' })).toBeInTheDocument();
+    await waitFor(() => expect(MockWebSocket.instances.length).toBeGreaterThan(0));
+
+    const progressMessage = {
+      type: 'generation_progress',
+      task_id: 'task_generation',
+      review_id: 2,
+      step: 'rag_search',
+      status: 'started',
+      progress: { current: 0, total: 2, percentage: 0 },
+    };
+
+    act(() => {
+      MockWebSocket.instances[0].emit(progressMessage);
+      MockWebSocket.instances[0].emit(progressMessage);
+    });
+
+    await waitFor(() => {
+      expect(screen.getAllByText('답변 생성: 유사 사례 검색 0/2 (0%)')).toHaveLength(1);
+    });
+
+    act(() => {
+      MockWebSocket.instances[0].emit({
+        type: 'review_updated',
+        task_id: 'task_generation',
+        event: 'rag_search_completed',
+        status: 'completed',
+        review: { ...reviews[1], status: 'generating' },
+        progress: { current: 0, total: 2, percentage: 0 },
+      });
+    });
+
+    expect(screen.queryByText('기다림끝 리뷰: 생성중')).not.toBeInTheDocument();
+
+    act(() => {
+      MockWebSocket.instances[0].emit({
+        type: 'review_updated',
+        task_id: 'task_generation',
+        event: 'generation_completed',
+        status: 'completed',
+        review: { ...reviews[1], status: 'needs_approval', reply_text: '새 답변입니다.' },
+        progress: { current: 2, total: 2, percentage: 100 },
+      });
+      MockWebSocket.instances[0].emit({
+        type: 'task_complete',
+        task_id: 'task_generation',
+        summary: { total: 2, success: 2, failed: 0 },
+      });
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('기다림끝 리뷰: 승인필요')).toBeInTheDocument();
+      expect(screen.getByText('작업 완료: 2/2건 처리')).toBeInTheDocument();
+    });
+    expect(screen.queryByText('답변 생성: 유사 사례 검색 0/2 (0%)')).not.toBeInTheDocument();
   });
 });

@@ -95,7 +95,23 @@ async function mockBackend(page) {
       return;
     }
     if (method === 'GET' && path === '/stores/1/reviews') {
-      await route.fulfill({ json: { total: reviews.length, page: 1, size: 50, reviews } });
+      const size = Number(url.searchParams.get('size') || '20');
+      if (size > 100) {
+        await route.fulfill({
+          status: 422,
+          json: {
+            detail: [
+              {
+                loc: ['query', 'size'],
+                msg: 'Input should be less than or equal to 100',
+                type: 'less_than_equal',
+              },
+            ],
+          },
+        });
+        return;
+      }
+      await route.fulfill({ json: { total: reviews.length, page: 1, size, reviews } });
       return;
     }
     if (method === 'GET' && path === '/stores/1/reviews/1') {
@@ -154,6 +170,7 @@ test.afterEach(async ({ page }) => {
 
 test('setup shows API error when backend is offline', async ({ page }) => {
   allowNetworkConsoleErrors.set(page, true);
+  await page.route('http://localhost:8000/api/v1/**', (route) => route.abort('connectionrefused'));
   await page.goto('/setup');
   await page.getByRole('button', { name: '데모 채우기' }).click();
   await page.getByRole('button', { name: '등록' }).click();
@@ -176,7 +193,7 @@ test('setup to dashboard flow works with API responses', async ({ page }) => {
 
 test('dashboard batch and approval controls call backend APIs', async ({ page }) => {
   await mockBackend(page);
-  await page.evaluate(() => localStorage.setItem('store_id', '1'));
+  await page.evaluate(() => localStorage.setItem('store_id', '3'));
   await page.goto('/dashboard');
 
   await expect(page.getByRole('heading', { name: '민트치킨 성수점' })).toBeVisible();

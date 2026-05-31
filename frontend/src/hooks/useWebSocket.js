@@ -4,15 +4,18 @@ import { WS_BASE_URL } from '../services/api';
 const DISABLED = import.meta.env.VITE_DISABLE_WS === 'true';
 const MAX_RETRIES = 3;
 const RETRY_DELAY_MS = 5_000;
+const MAX_BUFFERED_MESSAGES = 100;
 
 export function useWebSocket(storeId) {
   const socketRef = useRef(null);
   const retryTimerRef = useRef(null);
   const manualCloseRef = useRef(false);
   const retryCountRef = useRef(0);
+  const messageSeqRef = useRef(0);
   const [status, setStatus] = useState(DISABLED ? 'disabled' : 'idle');
   const [retryCount, setRetryCount] = useState(0);
   const [lastMessage, setLastMessage] = useState(null);
+  const [messages, setMessages] = useState([]);
   const [error, setError] = useState('');
 
   const wsUrl = useMemo(() => {
@@ -56,11 +59,17 @@ export function useWebSocket(storeId) {
     };
 
     socket.onmessage = (event) => {
+      let message;
       try {
-        setLastMessage(JSON.parse(event.data));
+        message = JSON.parse(event.data);
       } catch {
-        setLastMessage({ type: 'message', raw: event.data });
+        message = { type: 'message', raw: event.data };
       }
+
+      messageSeqRef.current += 1;
+      const bufferedMessage = { id: messageSeqRef.current, payload: message };
+      setLastMessage(message);
+      setMessages((prev) => [...prev, bufferedMessage].slice(-MAX_BUFFERED_MESSAGES));
     };
 
     socket.onerror = () => {
@@ -114,6 +123,7 @@ export function useWebSocket(storeId) {
     status,
     retryCount,
     lastMessage,
+    messages,
     error,
     reconnect,
     disconnect,

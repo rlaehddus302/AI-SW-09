@@ -11,7 +11,7 @@ import {
   Wifi,
   WifiOff,
 } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import ReviewCard from '../components/ReviewCard';
 import ReviewDetailPanel from '../components/ReviewDetailPanel';
 import StatsCards from '../components/StatsCards';
@@ -26,6 +26,29 @@ import { useWebSocket } from '../hooks/useWebSocket';
 import { api, storeIdStorage } from '../services/api';
 
 const listSize = 50;
+const maxReviewPageSize = 100;
+const activityLimit = 6;
+const sentimentKeys = ['positive', 'negative', 'malicious'];
+const riskKeys = ['low', 'medium', 'high'];
+const finalReviewEvents = new Set([
+  'analysis_completed',
+  'analysis_failed',
+  'generation_completed',
+  'generation_failed',
+]);
+const taskTypeLabels = {
+  analysis_progress: '분석',
+  generation_progress: '답변 생성',
+};
+const stepLabels = {
+  classification: '분류',
+  interpretation: '해석',
+  rag_search: '유사 사례 검색',
+  reply_generation: '답변 작성',
+  approval_gate: '승인 기준 확인',
+  analysis: '분석',
+  generation: '답변 생성',
+};
 
 function makeCounts(reviews) {
   return reviews.reduce(
@@ -36,6 +59,54 @@ function makeCounts(reviews) {
     },
     { all: 0, dine_in: 0, takeout: 0, delivery: 0 },
   );
+}
+
+function makeStats(reviews, orderType = 'all') {
+  const scopedReviews = reviews.filter((review) => (
+    orderType === 'all' || review.order_type === orderType
+  ));
+  const sentimentDistribution = Object.fromEntries(sentimentKeys.map((key) => [key, 0]));
+  const riskDistribution = Object.fromEntries(riskKeys.map((key) => [key, 0]));
+  const statusDistribution = Object.fromEntries(Object.keys(statusLabels).map((key) => [key, 0]));
+  const subTypeDistribution = {};
+
+  scopedReviews.forEach((review) => {
+    if (review.sentiment) sentimentDistribution[review.sentiment] += 1;
+    if (review.risk_level) riskDistribution[review.risk_level] += 1;
+    if (review.status) statusDistribution[review.status] += 1;
+    if (review.sub_type) subTypeDistribution[review.sub_type] = (subTypeDistribution[review.sub_type] || 0) + 1;
+  });
+
+  return {
+    total_reviews: scopedReviews.length,
+    sentiment_distribution: sentimentDistribution,
+    risk_distribution: riskDistribution,
+    status_distribution: statusDistribution,
+    sub_type_distribution: subTypeDistribution,
+  };
+}
+
+function matchesFilters(review, { orderType, statusFilter, sentimentFilter }) {
+  if (orderType !== 'all' && review.order_type !== orderType) return false;
+  if (statusFilter !== 'all' && review.status !== statusFilter) return false;
+  if (sentimentFilter !== 'all' && review.sentiment !== sentimentFilter) return false;
+  return true;
+}
+
+function mergeReview(reviews, updatedReview, { include }) {
+  const exists = reviews.some((review) => review.id === updatedReview.id);
+  if (!include) return reviews.filter((review) => review.id !== updatedReview.id);
+  if (!exists) return [updatedReview, ...reviews];
+  return reviews.map((review) => (review.id === updatedReview.id ? { ...review, ...updatedReview } : review));
+}
+
+function formatProgressActivity(message) {
+  const taskLabel = taskTypeLabels[message.type] || '작업';
+  const stepLabel = stepLabels[message.step] || message.step || '처리';
+  const current = message.progress?.current ?? 0;
+  const total = message.progress?.total ?? 0;
+  const percentage = message.progress?.percentage ?? 0;
+  return `${taskLabel}: ${stepLabel} ${current}/${total} (${percentage}%)`;
 }
 
 function connectionLabel(status) {
@@ -67,6 +138,7 @@ export default function DashboardPage({ onSetup }) {
   const [actionBusy, setActionBusy] = useState(false);
   const [error, setError] = useState('');
   const [activity, setActivity] = useState([]);
+  const processedMessageIdRef = useRef(0);
   const storeId = storeIdStorage.get();
   const ws = useWebSocket(store?.id || storeId);
 
@@ -75,18 +147,55 @@ export default function DashboardPage({ onSetup }) {
   const selectedVisibleCount = visibleIds.filter((id) => selectedIds.has(id)).length;
   const allVisibleSelected = visibleIds.length > 0 && selectedVisibleCount === visibleIds.length;
 
-  const pushActivity = useCallback((message, type = 'info') => {
-    setActivity((prev) => [
-      { id: `${Date.now()}_${Math.random()}`, message, type, time: new Date() },
-      ...prev,
-    ].slice(0, 5));
+  const pushActivity = useCallback((message, type = 'info', key = null) => {
+    setActivity((prev) => {
+      const id = key || `${Date.now()}_${Math.random()}`;
+      const nextItem = { id, message, type, time: new Date() };
+      const previousItems = key ? prev.filter((item) => item.id !== key) : prev;
+      return [nextItem, ...previousItems].slice(0, activityLimit);
+    });
   }, []);
 
+  const applyRealtimeReview = useCallback(
+    (updatedReview) => {
+      const include = matchesFilters(updatedReview, { orderType, statusFilter, sentimentFilter });
+
+      setReviews((prev) => mergeReview(prev, updatedReview, { include }));
+      setAllReviews((prev) => {
+        const next = mergeReview(prev, updatedReview, { include: true });
+        setStats(makeStats(next, orderType));
+        return next;
+      });
+      setSelectedReview((prev) => (
+        prev?.id === updatedReview.id ? { ...prev, ...updatedReview } : prev
+      ));
+    },
+    [orderType, sentimentFilter, statusFilter],
+  );
+
+  const applyLocalReviewPatch = useCallback(
+    (reviewIds, patch) => {
+      const idSet = new Set(reviewIds);
+      const patchReview = (review) => (idSet.has(review.id) ? { ...review, ...patch } : review);
+
+      setReviews((prev) => prev
+        .map(patchReview)
+        .filter((review) => matchesFilters(review, { orderType, statusFilter, sentimentFilter })));
+      setAllReviews((prev) => {
+        const next = prev.map(patchReview);
+        setStats(makeStats(next, orderType));
+        return next;
+      });
+      setSelectedReview((prev) => (prev && idSet.has(prev.id) ? { ...prev, ...patch } : prev));
+    },
+    [orderType, sentimentFilter, statusFilter],
+  );
+
   const loadDashboard = useCallback(
-    async ({ preserveSelection = true } = {}) => {
+    async ({ preserveSelection = true, silent = false } = {}) => {
       if (!storeId) return;
       setError('');
-      setLoading(true);
+      if (!silent) setLoading(true);
 
       try {
         const filters = {
@@ -101,14 +210,20 @@ export default function DashboardPage({ onSetup }) {
           api.getStore(storeId),
           api.getReviews(storeId, filters),
           api.getStats(storeId, orderType),
-          api.getReviews(storeId, { page: 1, size: 200 }),
+          api.getReviews(storeId, { page: 1, size: maxReviewPageSize }),
         ]);
 
         const nextReviews = reviewData.reviews || [];
+        const nextAllReviews = allData.reviews || [];
         setStore(storeData);
         setReviews(nextReviews);
         setStats(statsData);
-        setAllReviews(allData.reviews || []);
+        setAllReviews(nextAllReviews);
+        setSelectedReview((prev) => {
+          if (!prev) return prev;
+          const refreshedReview = nextAllReviews.find((review) => review.id === prev.id);
+          return refreshedReview ? { ...prev, ...refreshedReview } : prev;
+        });
 
         setSelectedIds((prev) => {
           if (!preserveSelection) return new Set();
@@ -123,7 +238,7 @@ export default function DashboardPage({ onSetup }) {
       } catch (requestError) {
         setError(requestError.message || '대시보드를 불러오지 못했습니다.');
       } finally {
-        setLoading(false);
+        if (!silent) setLoading(false);
       }
     },
     [orderType, sentimentFilter, statusFilter, storeId],
@@ -161,27 +276,54 @@ export default function DashboardPage({ onSetup }) {
     setSelectedIds((prev) => new Set([...prev].filter((id) => visibleIds.includes(id))));
   }, [visibleIds]);
 
-  useEffect(() => {
-    if (!ws.lastMessage) return;
+  const handleRealtimeMessage = useCallback((message) => {
+    if (message.type === 'review_updated' && message.review) {
+      applyRealtimeReview(message.review);
+      if (finalReviewEvents.has(message.event)) {
+        const name = message.review.reviewer_name || `#${message.review.id}`;
+        const type = message.status === 'failed' ? 'error' : 'success';
+        pushActivity(
+          `${name} 리뷰: ${statusLabels[message.review.status] || message.review.status}`,
+          type,
+          `review:${message.task_id}:${message.review.id}:${message.event}`,
+        );
+      }
+      return;
+    }
 
-    const message = ws.lastMessage;
     if (message.type === 'task_complete') {
-      pushActivity(`작업 완료: ${message.summary?.success ?? 0}건 처리`, 'success');
-      loadDashboard();
+      const success = message.summary?.success ?? 0;
+      const total = message.summary?.total ?? success;
+      const failed = message.summary?.failed ?? 0;
+      const text = failed
+        ? `작업 완료: ${success}/${total}건 처리, ${failed}건 실패`
+        : `작업 완료: ${success}/${total}건 처리`;
+      pushActivity(text, failed ? 'error' : 'success', `task:${message.task_id}`);
+      void loadDashboard({ preserveSelection: true, silent: true });
       return;
     }
 
     if (message.type === 'error') {
-      pushActivity(message.error || '실시간 작업 오류가 발생했습니다.', 'error');
+      pushActivity(
+        message.error || '실시간 작업 오류가 발생했습니다.',
+        'error',
+        `error:${message.task_id}:${message.review_id || 'task'}`,
+      );
       return;
     }
 
     if (message.progress) {
-      pushActivity(
-        `${message.step || '작업'} ${message.progress.current}/${message.progress.total} (${message.progress.percentage}%)`,
-      );
+      pushActivity(formatProgressActivity(message), 'info', `task:${message.task_id || message.type}`);
     }
-  }, [loadDashboard, pushActivity, ws.lastMessage]);
+  }, [applyRealtimeReview, loadDashboard, pushActivity]);
+
+  useEffect(() => {
+    const nextMessages = ws.messages.filter((message) => message.id > processedMessageIdRef.current);
+    if (!nextMessages.length) return;
+
+    nextMessages.forEach((message) => handleRealtimeMessage(message.payload));
+    processedMessageIdRef.current = nextMessages[nextMessages.length - 1].id;
+  }, [handleRealtimeMessage, ws.messages]);
 
   const toggleReview = (reviewId, checked) => {
     setSelectedIds((prev) => {
@@ -204,9 +346,18 @@ export default function DashboardPage({ onSetup }) {
     setError('');
     try {
       const result = await action();
-      pushActivity(result?.message || message, options.type || 'success');
-      await loadDashboard({ preserveSelection: options.preserveSelection ?? true });
-      if (selectedReviewId) await loadDetail(selectedReviewId);
+      if (options.patchReviewIds?.length && options.patch) {
+        applyLocalReviewPatch(options.patchReviewIds, options.patch);
+      }
+      pushActivity(
+        result?.message || message,
+        options.type || 'success',
+        options.trackTask && result?.task_id ? `task:${result.task_id}` : null,
+      );
+      if (options.reloadOnSuccess !== false) {
+        await loadDashboard({ preserveSelection: options.preserveSelection ?? true });
+        if (selectedReviewId) await loadDetail(selectedReviewId);
+      }
     } catch (requestError) {
       const actionError = requestError.message || '요청을 처리하지 못했습니다.';
       setError(actionError);
@@ -220,19 +371,35 @@ export default function DashboardPage({ onSetup }) {
 
   const analyzeSelected = () => {
     if (!selectedBatchIds.length || !storeId) return;
+    const reviewIds = [...selectedBatchIds];
     runAction(
-      `${selectedBatchIds.length}건 분석을 시작했습니다.`,
-      () => api.analyzeReviews(storeId, selectedBatchIds),
-      { preserveSelection: true },
+      `${reviewIds.length}건 분석을 시작했습니다.`,
+      () => api.analyzeReviews(storeId, reviewIds),
+      {
+        patchReviewIds: reviewIds,
+        patch: { status: 'analyzing' },
+        preserveSelection: true,
+        reloadOnSuccess: false,
+        trackTask: true,
+        type: 'info',
+      },
     );
   };
 
   const generateSelected = () => {
     if (!selectedBatchIds.length || !storeId) return;
+    const reviewIds = [...selectedBatchIds];
     runAction(
-      `${selectedBatchIds.length}건 답변 생성을 시작했습니다.`,
-      () => api.generateReplies(storeId, selectedBatchIds),
-      { preserveSelection: true },
+      `${reviewIds.length}건 답변 생성을 시작했습니다.`,
+      () => api.generateReplies(storeId, reviewIds),
+      {
+        patchReviewIds: reviewIds,
+        patch: { status: 'generating' },
+        preserveSelection: true,
+        reloadOnSuccess: false,
+        trackTask: true,
+        type: 'info',
+      },
     );
   };
 
@@ -248,11 +415,18 @@ export default function DashboardPage({ onSetup }) {
 
   const regenerateSelected = () => {
     if (!selectedReview || !storeId) return;
+    const reviewId = selectedReview.id;
     const action =
       selectedReview.status === 'analyzed'
-        ? () => api.generateReplies(storeId, [selectedReview.id])
-        : () => api.regenerateReply(storeId, selectedReview.id);
-    runAction('답변을 다시 생성했습니다.', action);
+        ? () => api.generateReplies(storeId, [reviewId])
+        : () => api.regenerateReply(storeId, reviewId);
+    runAction('답변을 다시 생성했습니다.', action, {
+      patchReviewIds: [reviewId],
+      patch: { status: 'generating' },
+      reloadOnSuccess: false,
+      trackTask: true,
+      type: 'info',
+    });
   };
 
   const resetStore = () => {

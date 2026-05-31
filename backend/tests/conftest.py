@@ -7,7 +7,9 @@ from fastapi.testclient import TestClient
 
 os.environ["DATABASE_URL"] = "sqlite+pysqlite:///:memory:"
 os.environ["CREATE_TABLES_ON_STARTUP"] = "false"
+os.environ["RESET_DATABASE_ON_STARTUP"] = "false"
 os.environ["SEED_ON_STARTUP"] = "false"
+os.environ["AI_MODE"] = "mock"
 
 from app.database import Base, SessionLocal, engine  # noqa: E402
 from app.main import app  # noqa: E402
@@ -120,4 +122,3 @@ def seeded_store() -> int:
         db.add_all(reviews)
         db.commit()
         return store.id
-
