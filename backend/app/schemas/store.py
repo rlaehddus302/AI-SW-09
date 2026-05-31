@@ -5,6 +5,8 @@ from typing import Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.openapi_examples import STORE_EXAMPLE, STORE_REQUEST_EXAMPLE
+
 
 class StoreBase(BaseModel):
     """가게 생성/수정 요청에서 공통으로 사용하는 필드입니다."""
@@ -14,6 +16,8 @@ class StoreBase(BaseModel):
     is_dine_in: bool = False
     is_takeout: bool = False
     is_delivery: bool = False
+
+    model_config = ConfigDict(json_schema_extra={"example": STORE_REQUEST_EXAMPLE})
 
 
 class StoreCreate(StoreBase):
@@ -34,4 +38,4 @@ class StoreRead(StoreBase):
     id: int
     created_at: datetime
 
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(from_attributes=True, json_schema_extra={"example": STORE_EXAMPLE})

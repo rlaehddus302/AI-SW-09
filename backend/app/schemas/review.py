@@ -6,12 +6,26 @@ from typing import Any, Optional
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from app.models.enums import OrderType, ReviewStatus, RiskLevel, Sentiment
+from app.openapi_examples import (
+    ANALYSIS_TASK_EXAMPLE,
+    APPROVE_ACTION_EXAMPLE,
+    BATCH_REVIEW_REQUEST_EXAMPLE,
+    INTERPRETATION_EXAMPLE,
+    RAG_REFERENCE_EXAMPLE,
+    REGENERATE_TASK_EXAMPLE,
+    REVIEW_DETAIL_EXAMPLE,
+    REVIEW_LIST_EXAMPLE,
+    REVIEW_LIST_ITEM_EXAMPLE,
+    REVIEW_STATS_EXAMPLE,
+)
 
 
 class BatchReviewRequest(BaseModel):
     """여러 리뷰를 한 번에 처리할 때 받는 리뷰 id 목록입니다."""
 
     review_ids: list[int] = Field(min_length=1, max_length=100)
+
+    model_config = ConfigDict(json_schema_extra={"example": BATCH_REVIEW_REQUEST_EXAMPLE})
 
     @model_validator(mode="after")
     def reject_duplicate_ids(self) -> "BatchReviewRequest":
@@ -37,7 +51,7 @@ class ReviewListItem(BaseModel):
     reply_text: Optional[str]
     created_at: datetime
 
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(from_attributes=True, json_schema_extra={"example": REVIEW_LIST_ITEM_EXAMPLE})
 
 
 class ReviewListResponse(BaseModel):
@@ -48,6 +62,8 @@ class ReviewListResponse(BaseModel):
     size: int
     reviews: list[ReviewListItem]
 
+    model_config = ConfigDict(json_schema_extra={"example": REVIEW_LIST_EXAMPLE})
+
 
 class Interpretation(BaseModel):
     """AI 해석 결과의 핵심 이슈, 답변 방향, 답변 톤입니다."""
@@ -56,6 +72,8 @@ class Interpretation(BaseModel):
     action_direction: Optional[str] = None
     reply_tone: Optional[str] = None
 
+    model_config = ConfigDict(json_schema_extra={"example": INTERPRETATION_EXAMPLE})
+
 
 class RagReference(BaseModel):
     """답변 생성에 참고한 유사 리뷰-답변 사례입니다."""
@@ -63,6 +81,8 @@ class RagReference(BaseModel):
     review: str
     reply: str
     similarity: Optional[float] = None
+
+    model_config = ConfigDict(json_schema_extra={"example": RAG_REFERENCE_EXAMPLE})
 
 
 class ReviewDetail(BaseModel):
@@ -84,6 +104,8 @@ class ReviewDetail(BaseModel):
     created_at: datetime
     updated_at: Optional[datetime]
 
+    model_config = ConfigDict(json_schema_extra={"example": REVIEW_DETAIL_EXAMPLE})
+
 
 class ReviewStats(BaseModel):
     """리뷰 대시보드 통계 카드와 분포 차트에 쓰는 집계 응답입니다."""
@@ -94,6 +116,8 @@ class ReviewStats(BaseModel):
     status_distribution: dict[str, int]
     sub_type_distribution: dict[str, int]
 
+    model_config = ConfigDict(json_schema_extra={"example": REVIEW_STATS_EXAMPLE})
+
 
 class AnalysisTaskResponse(BaseModel):
     """분석/답변 생성 배치 작업 시작 응답입니다."""
@@ -102,12 +126,16 @@ class AnalysisTaskResponse(BaseModel):
     message: str
     total: int
 
+    model_config = ConfigDict(json_schema_extra={"example": ANALYSIS_TASK_EXAMPLE})
+
 
 class RegenerateTaskResponse(BaseModel):
     """답변 재생성 작업 시작 응답입니다."""
 
     task_id: str
     message: str
+
+    model_config = ConfigDict(json_schema_extra={"example": REGENERATE_TASK_EXAMPLE})
 
 
 class ActionResponse(BaseModel):
@@ -116,3 +144,5 @@ class ActionResponse(BaseModel):
     id: int
     status: ReviewStatus
     message: str
+
+    model_config = ConfigDict(json_schema_extra={"example": APPROVE_ACTION_EXAMPLE})

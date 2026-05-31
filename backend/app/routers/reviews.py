@@ -2,19 +2,35 @@ from __future__ import annotations
 
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models import OrderType, Review, ReviewStatus, RiskLevel, Sentiment
+from app.openapi_examples import (
+    REVIEW_DETAIL_RESPONSE,
+    REVIEW_LIST_RESPONSE,
+    REVIEW_NOT_FOUND_RESPONSE,
+    REVIEW_STATS_RESPONSE,
+    STORE_NOT_FOUND_RESPONSE,
+    VALIDATION_ERROR_RESPONSE,
+)
 from app.routers.utils import get_review_or_404, get_store_or_404, review_detail_from_model
 from app.schemas.review import ReviewDetail, ReviewListResponse, ReviewStats
 
 router = APIRouter(prefix="/stores/{store_id}/reviews", tags=["reviews"])
 
 
-@router.get("", response_model=ReviewListResponse)
+@router.get(
+    "",
+    response_model=ReviewListResponse,
+    responses={
+        status.HTTP_200_OK: REVIEW_LIST_RESPONSE,
+        status.HTTP_404_NOT_FOUND: STORE_NOT_FOUND_RESPONSE,
+        422: VALIDATION_ERROR_RESPONSE,
+    },
+)
 def list_reviews(
     store_id: int,
     order_type: Optional[OrderType] = None,
@@ -46,7 +62,15 @@ def list_reviews(
     return ReviewListResponse(total=total, page=page, size=size, reviews=reviews)
 
 
-@router.get("/stats", response_model=ReviewStats)
+@router.get(
+    "/stats",
+    response_model=ReviewStats,
+    responses={
+        status.HTTP_200_OK: REVIEW_STATS_RESPONSE,
+        status.HTTP_404_NOT_FOUND: STORE_NOT_FOUND_RESPONSE,
+        422: VALIDATION_ERROR_RESPONSE,
+    },
+)
 def review_stats(
     store_id: int,
     order_type: Optional[OrderType] = None,
@@ -86,7 +110,15 @@ def review_stats(
     )
 
 
-@router.get("/{review_id}", response_model=ReviewDetail)
+@router.get(
+    "/{review_id}",
+    response_model=ReviewDetail,
+    responses={
+        status.HTTP_200_OK: REVIEW_DETAIL_RESPONSE,
+        status.HTTP_404_NOT_FOUND: REVIEW_NOT_FOUND_RESPONSE,
+        422: VALIDATION_ERROR_RESPONSE,
+    },
+)
 def read_review(store_id: int, review_id: int, db: Session = Depends(get_db)) -> ReviewDetail:
     """JSON 분석 필드를 파싱한 리뷰 상세 응답을 반환합니다."""
 

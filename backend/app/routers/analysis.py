@@ -12,6 +12,20 @@ from sqlalchemy.orm import Session
 from app import ai_contract
 from app.database import SessionLocal, get_db
 from app.models import OrderType, Review, ReviewStatus, RiskLevel, Sentiment
+from app.openapi_examples import (
+    ACTION_CONFLICT_RESPONSE,
+    ANALYSIS_CONFLICT_RESPONSE,
+    ANALYSIS_TASK_RESPONSE,
+    APPROVE_ACTION_RESPONSE,
+    BATCH_REVIEW_NOT_FOUND_RESPONSE,
+    GENERATION_CONFLICT_RESPONSE,
+    GENERATION_TASK_RESPONSE,
+    REGENERATE_CONFLICT_RESPONSE,
+    REGENERATE_TASK_RESPONSE,
+    REJECT_ACTION_RESPONSE,
+    REVIEW_NOT_FOUND_RESPONSE,
+    VALIDATION_ERROR_RESPONSE,
+)
 from app.routers.utils import (
     get_review_or_404,
     get_reviews_or_404,
@@ -516,7 +530,17 @@ async def save_approved_reply_task(store_id: int, review_id: int) -> None:
             return
 
 
-@router.post("/analyze", response_model=AnalysisTaskResponse, status_code=status.HTTP_202_ACCEPTED)
+@router.post(
+    "/analyze",
+    response_model=AnalysisTaskResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+    responses={
+        status.HTTP_202_ACCEPTED: ANALYSIS_TASK_RESPONSE,
+        status.HTTP_404_NOT_FOUND: BATCH_REVIEW_NOT_FOUND_RESPONSE,
+        status.HTTP_409_CONFLICT: ANALYSIS_CONFLICT_RESPONSE,
+        422: VALIDATION_ERROR_RESPONSE,
+    },
+)
 def analyze_reviews(
     store_id: int,
     payload: BatchReviewRequest,
@@ -540,7 +564,17 @@ def analyze_reviews(
     )
 
 
-@router.post("/generate-replies", response_model=AnalysisTaskResponse, status_code=status.HTTP_202_ACCEPTED)
+@router.post(
+    "/generate-replies",
+    response_model=AnalysisTaskResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+    responses={
+        status.HTTP_202_ACCEPTED: GENERATION_TASK_RESPONSE,
+        status.HTTP_404_NOT_FOUND: BATCH_REVIEW_NOT_FOUND_RESPONSE,
+        status.HTTP_409_CONFLICT: GENERATION_CONFLICT_RESPONSE,
+        422: VALIDATION_ERROR_RESPONSE,
+    },
+)
 def generate_replies(
     store_id: int,
     payload: BatchReviewRequest,
@@ -564,7 +598,16 @@ def generate_replies(
     )
 
 
-@router.post("/{review_id}/approve", response_model=ActionResponse)
+@router.post(
+    "/{review_id}/approve",
+    response_model=ActionResponse,
+    responses={
+        status.HTTP_200_OK: APPROVE_ACTION_RESPONSE,
+        status.HTTP_404_NOT_FOUND: REVIEW_NOT_FOUND_RESPONSE,
+        status.HTTP_409_CONFLICT: ACTION_CONFLICT_RESPONSE,
+        422: VALIDATION_ERROR_RESPONSE,
+    },
+)
 def approve_review(
     store_id: int,
     review_id: int,
@@ -581,7 +624,16 @@ def approve_review(
     return ActionResponse(id=review.id, status=review.status, message="답변이 승인되었습니다.")
 
 
-@router.post("/{review_id}/reject", response_model=ActionResponse)
+@router.post(
+    "/{review_id}/reject",
+    response_model=ActionResponse,
+    responses={
+        status.HTTP_200_OK: REJECT_ACTION_RESPONSE,
+        status.HTTP_404_NOT_FOUND: REVIEW_NOT_FOUND_RESPONSE,
+        status.HTTP_409_CONFLICT: ACTION_CONFLICT_RESPONSE,
+        422: VALIDATION_ERROR_RESPONSE,
+    },
+)
 def reject_review(store_id: int, review_id: int, db: Session = Depends(get_db)) -> ActionResponse:
     """승인 필요 답변을 보류 상태로 바꿔 재생성할 수 있게 합니다."""
 
@@ -592,7 +644,17 @@ def reject_review(store_id: int, review_id: int, db: Session = Depends(get_db)) 
     return ActionResponse(id=review.id, status=review.status, message="답변이 보류 처리되었습니다.")
 
 
-@router.post("/{review_id}/regenerate", response_model=RegenerateTaskResponse, status_code=status.HTTP_202_ACCEPTED)
+@router.post(
+    "/{review_id}/regenerate",
+    response_model=RegenerateTaskResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+    responses={
+        status.HTTP_202_ACCEPTED: REGENERATE_TASK_RESPONSE,
+        status.HTTP_404_NOT_FOUND: REVIEW_NOT_FOUND_RESPONSE,
+        status.HTTP_409_CONFLICT: REGENERATE_CONFLICT_RESPONSE,
+        422: VALIDATION_ERROR_RESPONSE,
+    },
+)
 def regenerate_reply(
     store_id: int,
     review_id: int,
