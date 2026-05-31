@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import hashlib
 import math
-import os
 from dataclasses import dataclass
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Union
+
+from app.config import get_settings
 
 from ..llm.client import (
     AIClientProtocol,
@@ -21,14 +22,15 @@ from ..llm.types import RAGReference
 class RAGConfig:
     collection_name: str = "review_reply_examples"
     persist_path: str = ".chroma/review_helper"
-    ai_mode: str = "auto"
+    ai_mode: str = "mock"
 
     @classmethod
     def from_env(cls) -> "RAGConfig":
+        settings = get_settings()
         return cls(
-            collection_name=os.getenv("RAG_COLLECTION_NAME", os.getenv("CHROMA_COLLECTION", cls.collection_name)),
-            persist_path=os.getenv("CHROMA_PERSIST_DIR", os.getenv("CHROMA_PERSIST_PATH", cls.persist_path)),
-            ai_mode=os.getenv("AI_MODE", "auto"),
+            collection_name=settings.rag_collection_name,
+            persist_path=settings.chroma_persist_dir,
+            ai_mode=settings.ai_mode,
         )
 
 

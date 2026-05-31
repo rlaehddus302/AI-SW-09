@@ -6,7 +6,8 @@ from sqlalchemy.orm import Session
 
 from app import ai_contract
 from app.config import get_settings
-from app.models import OrderType, Review, Store
+from app.demo import DEMO_STORE_ID
+from app.models import OrderType, Review, ReviewStatus, Store
 
 SEED_DATA_PATH = Path(__file__).with_name("seed_data.json")
 
@@ -19,27 +20,43 @@ def load_seed_data(path: Path = SEED_DATA_PATH) -> dict:
 def seed_database(db: Session) -> Store:
     data = load_seed_data()
     store_payload = data["store"]
-    store = db.scalar(select(Store).where(Store.store_name == store_payload["store_name"]))
+    store_id = int(store_payload.get("id", DEMO_STORE_ID))
+    store_values = {key: value for key, value in store_payload.items() if key != "id"}
+    review_defaults = data.get("review_defaults", {})
+
+    store = db.get(Store, store_id)
     if store is None:
-        store = Store(**store_payload)
+        store = Store(id=store_id, **store_values)
         db.add(store)
         db.flush()
+    else:
+        for field, value in store_values.items():
+            setattr(store, field, value)
 
-    existing_review_texts = set(
-        db.scalars(select(Review.review_text).where(Review.store_id == store.id)).all()
-    )
+    existing_reviews = {
+        review.review_text: review
+        for review in db.scalars(select(Review).where(Review.store_id == store.id)).all()
+    }
     for item in data.get("reviews", []):
-        if item["review_text"] in existing_review_texts:
-            continue
-        db.add(
-            Review(
-                store_id=store.id,
-                review_text=item["review_text"],
-                reviewer_name=item.get("reviewer_name"),
-                rating=item.get("rating"),
-                order_type=OrderType(item["order_type"]),
-            )
-        )
+        review = existing_reviews.get(item["review_text"])
+        if review is None:
+            review = Review(store_id=store.id, review_text=item["review_text"])
+            db.add(review)
+        else:
+            review.review_text = item["review_text"]
+
+        review.reviewer_name = item.get("reviewer_name")
+        review.rating = item.get("rating")
+        review.order_type = OrderType(item["order_type"])
+        review.sentiment = None
+        review.sub_type = None
+        review.risk_level = None
+        review.interpretation = None
+        review.reply_tone = None
+        review.reply_text = None
+        review.rag_references = None
+        status = item.get("status", review_defaults.get("status", ReviewStatus.PENDING.value))
+        review.status = ReviewStatus(status)
     db.commit()
     db.refresh(store)
     return store
@@ -51,4 +68,3 @@ async def seed_rag_if_enabled(store_id: int) -> None:
         return
     data = load_seed_data()
     await ai_contract.seed_rag_pairs(data.get("rag_seed_pairs", []), store_id)
-

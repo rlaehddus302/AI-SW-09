@@ -1,10 +1,14 @@
 {
   "store": {
+    "id": 1,
     "store_name": "맛있는 치킨집",
     "origin_info": "닭고기: 국내산, 감자: 미국산, 양배추: 국내산",
     "is_dine_in": true,
     "is_takeout": true,
     "is_delivery": true
+  },
+  "review_defaults": {
+    "status": "pending"
   },
   "reviews": [
     {
@@ -332,4 +336,3 @@
     }
   ]
 }
-

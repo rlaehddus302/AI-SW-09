@@ -1,9 +1,8 @@
 """Upstage Solar client and deterministic mock fallback.
 
 AI_MODE policy:
-- mock: never call external services.
-- live: require Upstage credentials and propagate API/timeout errors.
-- auto: use live when an API key is present, otherwise use deterministic mock.
+- mock: deterministic local responses; never calls external services.
+- live: real Upstage API calls; requires UPSTAGE_API_KEY.
 """
 
 from __future__ import annotations
@@ -11,7 +10,6 @@ from __future__ import annotations
 import hashlib
 import json
 import math
-import os
 import re
 import socket
 import urllib.error
@@ -20,7 +18,7 @@ from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, Mapping, Optional, Protocol
 
 
-ALLOWED_AI_MODES = {"auto", "live", "mock"}
+ALLOWED_AI_MODES = {"live", "mock"}
 DEFAULT_TIMEOUT_SECONDS = 30.0
 
 
@@ -62,7 +60,7 @@ HttpPost = Callable[[str, Mapping[str, str], Mapping[str, Any], float], Mapping[
 @dataclass(frozen=True)
 class UpstageConfig:
     api_key: Optional[str] = None
-    ai_mode: str = "auto"
+    ai_mode: str = "mock"
     base_url: str = "https://api.upstage.ai/v1"
     chat_model: str = "solar-pro3"
     embedding_url: str = "https://api.upstage.ai/v1/solar/embeddings"
@@ -72,28 +70,33 @@ class UpstageConfig:
 
     @classmethod
     def from_env(cls) -> "UpstageConfig":
+        from app.config import get_settings
+
+        settings = get_settings()
+        embedding_query_model = (
+            settings.upstage_embedding_query_model
+            or settings.upstage_embedding_model
+            or cls.embedding_query_model
+        )
+        embedding_passage_model = (
+            settings.upstage_embedding_passage_model
+            or settings.upstage_embedding_model
+            or cls.embedding_passage_model
+        )
         return cls(
-            api_key=os.getenv("UPSTAGE_API_KEY"),
-            ai_mode=os.getenv("AI_MODE", "auto"),
-            base_url=os.getenv("UPSTAGE_BASE_URL", cls.base_url),
-            chat_model=os.getenv("UPSTAGE_CHAT_MODEL", os.getenv("UPSTAGE_SOLAR_MODEL", cls.chat_model)),
-            embedding_url=os.getenv("UPSTAGE_EMBEDDING_URL", cls.embedding_url),
-            embedding_query_model=os.getenv(
-                "UPSTAGE_EMBEDDING_MODEL",
-                os.getenv("UPSTAGE_EMBEDDING_QUERY_MODEL", cls.embedding_query_model),
-            ),
-            embedding_passage_model=os.getenv(
-                "UPSTAGE_EMBEDDING_MODEL",
-                os.getenv("UPSTAGE_EMBEDDING_PASSAGE_MODEL", cls.embedding_passage_model),
-            ),
-            timeout_seconds=float(
-                os.getenv("AI_TIMEOUT_SECONDS", os.getenv("UPSTAGE_TIMEOUT_SECONDS", DEFAULT_TIMEOUT_SECONDS))
-            ),
+            api_key=settings.upstage_api_key,
+            ai_mode=settings.ai_mode,
+            base_url=settings.upstage_base_url,
+            chat_model=settings.upstage_chat_model,
+            embedding_url=settings.upstage_embedding_url,
+            embedding_query_model=embedding_query_model,
+            embedding_passage_model=embedding_passage_model,
+            timeout_seconds=settings.ai_timeout_seconds,
         )
 
 
 def normalize_ai_mode(mode: Optional[str]) -> str:
-    normalized = (mode or "auto").strip().lower()
+    normalized = (mode or "mock").strip().lower()
     if normalized not in ALLOWED_AI_MODES:
         raise ValueError(f"AI_MODE must be one of {sorted(ALLOWED_AI_MODES)}, got {mode!r}")
     return normalized
@@ -108,9 +111,6 @@ def create_ai_client(
     requested_mode = normalize_ai_mode(config.ai_mode)
 
     if requested_mode == "mock":
-        return DeterministicMockAIClient()
-
-    if requested_mode == "auto" and not config.api_key:
         return DeterministicMockAIClient()
 
     if not config.api_key:
