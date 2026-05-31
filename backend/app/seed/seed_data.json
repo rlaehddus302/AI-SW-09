@@ -1,0 +1,335 @@
+{
+  "store": {
+    "store_name": "맛있는 치킨집",
+    "origin_info": "닭고기: 국내산, 감자: 미국산, 양배추: 국내산",
+    "is_dine_in": true,
+    "is_takeout": true,
+    "is_delivery": true
+  },
+  "reviews": [
+    {
+      "review_text": "치킨이 정말 바삭하고 맛있어요! 소스도 양이 넉넉해서 좋았습니다.",
+      "reviewer_name": "맛집탐방러",
+      "rating": 5,
+      "order_type": "delivery",
+      "expected_sentiment": "positive",
+      "expected_sub_type": null,
+      "expected_risk_level": "low",
+      "sample_reply": "안녕하세요, 맛있는 치킨집입니다! 맛있게 드셨다니 기쁩니다. 항상 바삭하고 맛있는 치킨으로 보답하겠습니다. 감사합니다."
+    },
+    {
+      "review_text": "매장에서 바로 먹으니 튀김이 살아있고 직원분도 친절했어요.",
+      "reviewer_name": "동네손님",
+      "rating": 5,
+      "order_type": "dine_in",
+      "expected_sentiment": "positive",
+      "expected_sub_type": null,
+      "expected_risk_level": "low",
+      "sample_reply": "방문해 주셔서 감사합니다. 매장에서 더 편하게 드실 수 있도록 계속 신경 쓰겠습니다."
+    },
+    {
+      "review_text": "포장 시간이 빨랐고 집에 와서 먹어도 따뜻했습니다.",
+      "reviewer_name": "퇴근길",
+      "rating": 5,
+      "order_type": "takeout",
+      "expected_sentiment": "positive",
+      "expected_sub_type": null,
+      "expected_risk_level": "low",
+      "sample_reply": "포장 이용 감사합니다. 따뜻하게 드실 수 있도록 포장 품질을 꾸준히 관리하겠습니다."
+    },
+    {
+      "review_text": "양념치킨 소스가 적당히 달고 매워서 가족들이 좋아했습니다.",
+      "reviewer_name": "가족외식",
+      "rating": 5,
+      "order_type": "delivery",
+      "expected_sentiment": "positive",
+      "expected_sub_type": null,
+      "expected_risk_level": "low",
+      "sample_reply": "가족분들과 맛있게 드셨다니 감사합니다. 다음 주문도 만족하실 수 있게 준비하겠습니다."
+    },
+    {
+      "review_text": "홀 테이블이 깨끗하고 치킨도 빨리 나왔습니다.",
+      "reviewer_name": "깔끔한맛",
+      "rating": 4,
+      "order_type": "dine_in",
+      "expected_sentiment": "positive",
+      "expected_sub_type": null,
+      "expected_risk_level": "low",
+      "sample_reply": "좋은 리뷰 감사합니다. 매장 청결과 빠른 제공을 계속 유지하겠습니다."
+    },
+    {
+      "review_text": "포장 주문했는데 요청한 소스까지 잘 챙겨주셨어요.",
+      "reviewer_name": "소스러버",
+      "rating": 5,
+      "order_type": "takeout",
+      "expected_sentiment": "positive",
+      "expected_sub_type": null,
+      "expected_risk_level": "low",
+      "sample_reply": "요청 사항이 잘 전달되어 다행입니다. 다음에도 꼼꼼히 챙기겠습니다."
+    },
+    {
+      "review_text": "배달인데도 감자튀김이 눅눅하지 않아서 좋았습니다.",
+      "reviewer_name": "감자좋아",
+      "rating": 5,
+      "order_type": "delivery",
+      "expected_sentiment": "positive",
+      "expected_sub_type": null,
+      "expected_risk_level": "low",
+      "sample_reply": "맛있게 드셔 주셔서 감사합니다. 배달 품질도 놓치지 않겠습니다."
+    },
+    {
+      "review_text": "포장 용기가 단단해서 이동 중에도 흐트러지지 않았습니다.",
+      "reviewer_name": "튼튼포장",
+      "rating": 4,
+      "order_type": "takeout",
+      "expected_sentiment": "positive",
+      "expected_sub_type": null,
+      "expected_risk_level": "low",
+      "sample_reply": "포장 품질을 좋게 봐주셔서 감사합니다. 늘 안정적으로 준비하겠습니다."
+    },
+    {
+      "review_text": "배달 기사님도 친절했고 치킨도 따뜻했습니다.",
+      "reviewer_name": "따뜻한치킨",
+      "rating": 5,
+      "order_type": "delivery",
+      "expected_sentiment": "positive",
+      "expected_sub_type": null,
+      "expected_risk_level": "low",
+      "sample_reply": "따뜻하게 받아보셨다니 다행입니다. 좋은 경험을 드릴 수 있도록 계속 노력하겠습니다."
+    },
+    {
+      "review_text": "매장에서 먹은 후라이드가 담백하고 기름 냄새도 없었습니다.",
+      "reviewer_name": "후라이드파",
+      "rating": 5,
+      "order_type": "dine_in",
+      "expected_sentiment": "positive",
+      "expected_sub_type": null,
+      "expected_risk_level": "low",
+      "sample_reply": "방문과 리뷰 감사합니다. 신선한 기름과 재료 관리에 계속 힘쓰겠습니다."
+    },
+    {
+      "review_text": "배달이 1시간이나 걸렸고 음식이 많이 식어서 왔습니다.",
+      "reviewer_name": "배달고객1",
+      "rating": 1,
+      "order_type": "delivery",
+      "expected_sentiment": "negative",
+      "expected_sub_type": "배달지연",
+      "expected_risk_level": "medium",
+      "sample_reply": "배달 지연으로 불편을 드려 죄송합니다. 배달 동선을 점검하고 더 따뜻하게 전달되도록 개선하겠습니다."
+    },
+    {
+      "review_text": "예상 시간보다 40분 늦게 도착했습니다. 안내도 없어서 답답했어요.",
+      "reviewer_name": "늦은저녁",
+      "rating": 2,
+      "order_type": "delivery",
+      "expected_sentiment": "negative",
+      "expected_sub_type": "배달지연",
+      "expected_risk_level": "medium",
+      "sample_reply": "기다리시게 해 죄송합니다. 지연 안내와 배달 시간 관리를 더 철저히 하겠습니다."
+    },
+    {
+      "review_text": "주문 후 한참 지나서야 출발했다고 떠서 식사 시간이 다 밀렸습니다.",
+      "reviewer_name": "기다림",
+      "rating": 2,
+      "order_type": "delivery",
+      "expected_sentiment": "negative",
+      "expected_sub_type": "배달지연",
+      "expected_risk_level": "medium",
+      "sample_reply": "식사 시간이 늦어진 점 사과드립니다. 조리와 배달 접수 과정을 다시 확인하겠습니다."
+    },
+    {
+      "review_text": "배달이 너무 늦어서 치킨이 눅눅해졌습니다.",
+      "reviewer_name": "눅눅싫어",
+      "rating": 2,
+      "order_type": "delivery",
+      "expected_sentiment": "negative",
+      "expected_sub_type": "배달지연",
+      "expected_risk_level": "medium",
+      "sample_reply": "늦은 배달로 맛을 제대로 전달드리지 못해 죄송합니다. 배달 품질을 개선하겠습니다."
+    },
+    {
+      "review_text": "홀에서 먹었는데 간이 조금 강하고 짰습니다.",
+      "reviewer_name": "싱겁게",
+      "rating": 3,
+      "order_type": "dine_in",
+      "expected_sentiment": "negative",
+      "expected_sub_type": "음식맛",
+      "expected_risk_level": "medium",
+      "sample_reply": "간이 강하게 느껴지셨다니 죄송합니다. 조리 기준을 다시 점검하겠습니다."
+    },
+    {
+      "review_text": "포장해서 먹었는데 튀김옷이 생각보다 두껍고 느끼했습니다.",
+      "reviewer_name": "바삭원함",
+      "rating": 3,
+      "order_type": "takeout",
+      "expected_sentiment": "negative",
+      "expected_sub_type": "음식맛",
+      "expected_risk_level": "medium",
+      "sample_reply": "기대에 미치지 못해 죄송합니다. 튀김 상태와 조리 시간을 다시 점검하겠습니다."
+    },
+    {
+      "review_text": "양념이 너무 달아서 몇 조각 먹지 못했습니다.",
+      "reviewer_name": "덜달게",
+      "rating": 2,
+      "order_type": "delivery",
+      "expected_sentiment": "negative",
+      "expected_sub_type": "음식맛",
+      "expected_risk_level": "medium",
+      "sample_reply": "양념 맛이 맞지 않으셨다니 죄송합니다. 맛 밸런스를 다시 확인하겠습니다."
+    },
+    {
+      "review_text": "매장에서 먹은 치킨이 조금 덜 익은 느낌이었습니다.",
+      "reviewer_name": "걱정됨",
+      "rating": 2,
+      "order_type": "dine_in",
+      "expected_sentiment": "negative",
+      "expected_sub_type": "음식맛",
+      "expected_risk_level": "medium",
+      "sample_reply": "조리 상태로 걱정을 드려 죄송합니다. 내부 온도와 조리 기준을 철저히 확인하겠습니다."
+    },
+    {
+      "review_text": "포장 봉투 안에서 소스가 새서 용기가 끈적했습니다.",
+      "reviewer_name": "소스샘",
+      "rating": 2,
+      "order_type": "takeout",
+      "expected_sentiment": "negative",
+      "expected_sub_type": "포장불량",
+      "expected_risk_level": "medium",
+      "sample_reply": "포장 상태로 불편을 드려 죄송합니다. 소스 밀봉과 포장 확인을 강화하겠습니다."
+    },
+    {
+      "review_text": "치킨무 국물이 새서 포장지가 다 젖었습니다.",
+      "reviewer_name": "젖은봉투",
+      "rating": 2,
+      "order_type": "takeout",
+      "expected_sentiment": "negative",
+      "expected_sub_type": "포장불량",
+      "expected_risk_level": "medium",
+      "sample_reply": "포장 누수로 불편을 드려 죄송합니다. 용기 체결 상태를 더 꼼꼼히 확인하겠습니다."
+    },
+    {
+      "review_text": "배달 상자가 찌그러져서 음식이 한쪽으로 쏠렸습니다.",
+      "reviewer_name": "쏠림",
+      "rating": 2,
+      "order_type": "delivery",
+      "expected_sentiment": "negative",
+      "expected_sub_type": "포장불량",
+      "expected_risk_level": "medium",
+      "sample_reply": "배달 중 포장이 흐트러져 죄송합니다. 포장재와 전달 방식을 점검하겠습니다."
+    },
+    {
+      "review_text": "매장에서 먹다가 작은 비닐 조각 같은 게 나왔습니다.",
+      "reviewer_name": "위생걱정",
+      "rating": 1,
+      "order_type": "dine_in",
+      "expected_sentiment": "negative",
+      "expected_sub_type": "이물질",
+      "expected_risk_level": "high",
+      "sample_reply": "이물질 의심 상황으로 불편과 걱정을 드려 죄송합니다. 즉시 조리 환경과 재료 보관 과정을 점검하겠습니다."
+    },
+    {
+      "review_text": "배달 음식 안에서 머리카락이 발견됐습니다. 위생 관리가 필요합니다.",
+      "reviewer_name": "청결중요",
+      "rating": 1,
+      "order_type": "delivery",
+      "expected_sentiment": "negative",
+      "expected_sub_type": "이물질",
+      "expected_risk_level": "high",
+      "sample_reply": "위생 문제로 불편을 드려 진심으로 사과드립니다. 조리자 위생과 포장 전 확인을 즉시 강화하겠습니다."
+    },
+    {
+      "review_text": "홀 직원이 주문을 대충 받는 느낌이라 불편했습니다.",
+      "reviewer_name": "응대중요",
+      "rating": 2,
+      "order_type": "dine_in",
+      "expected_sentiment": "negative",
+      "expected_sub_type": "불친절",
+      "expected_risk_level": "medium",
+      "sample_reply": "응대 과정에서 불편을 드려 죄송합니다. 직원 응대 교육을 다시 진행하겠습니다."
+    },
+    {
+      "review_text": "추가 요청을 했는데 직원분 표정이 좋지 않아 민망했습니다.",
+      "reviewer_name": "민망함",
+      "rating": 2,
+      "order_type": "dine_in",
+      "expected_sentiment": "negative",
+      "expected_sub_type": "불친절",
+      "expected_risk_level": "medium",
+      "sample_reply": "불편한 응대를 느끼게 해 죄송합니다. 요청 사항을 더 친절히 안내하도록 개선하겠습니다."
+    },
+    {
+      "review_text": "이 가게는 완전 사기입니다. 다시는 안 먹습니다.",
+      "reviewer_name": "화난손님",
+      "rating": 1,
+      "order_type": "delivery",
+      "expected_sentiment": "malicious",
+      "expected_sub_type": "악성",
+      "expected_risk_level": "high",
+      "sample_reply": "불편을 느끼신 점은 확인하겠습니다. 다만 구체적인 주문 정보를 알려주시면 사실관계를 확인해 안내드리겠습니다."
+    },
+    {
+      "review_text": "돈 아까운 최악의 집. 별 하나도 아깝습니다.",
+      "reviewer_name": "실망",
+      "rating": 1,
+      "order_type": "takeout",
+      "expected_sentiment": "malicious",
+      "expected_sub_type": "악성",
+      "expected_risk_level": "high",
+      "sample_reply": "만족을 드리지 못해 죄송합니다. 구체적인 불편 사항을 알려주시면 확인 후 개선하겠습니다."
+    },
+    {
+      "review_text": "여기 음식 먹으면 후회합니다. 주변에도 다 말할 겁니다.",
+      "reviewer_name": "분노",
+      "rating": 1,
+      "order_type": "dine_in",
+      "expected_sentiment": "malicious",
+      "expected_sub_type": "악성",
+      "expected_risk_level": "high",
+      "sample_reply": "불편을 겪으신 부분은 확인하겠습니다. 사실 확인을 위해 방문 시간과 주문 내역을 알려주시면 감사하겠습니다."
+    },
+    {
+      "review_text": "배달이 늦고 음식도 식어서 환불받고 싶습니다.",
+      "reviewer_name": "환불요청1",
+      "rating": 1,
+      "order_type": "delivery",
+      "expected_sentiment": "negative",
+      "expected_sub_type": "환불요청",
+      "expected_risk_level": "high",
+      "sample_reply": "불편을 드려 죄송합니다. 주문 정보를 확인해 가능한 조치와 보상 절차를 안내드리겠습니다."
+    },
+    {
+      "review_text": "누락된 메뉴가 있어서 환불 요청합니다. 확인 부탁드립니다.",
+      "reviewer_name": "메뉴누락",
+      "rating": 1,
+      "order_type": "delivery",
+      "expected_sentiment": "negative",
+      "expected_sub_type": "환불요청",
+      "expected_risk_level": "high",
+      "sample_reply": "메뉴 누락으로 불편을 드려 죄송합니다. 주문 내역을 확인해 빠르게 안내드리겠습니다."
+    }
+  ],
+  "rag_seed_pairs": [
+    {
+      "review": "치킨이 정말 바삭하고 맛있어요!",
+      "reply": "감사합니다. 더 맛있는 치킨으로 보답하겠습니다.",
+      "sub_type": null,
+      "risk_level": "low",
+      "order_type": "delivery"
+    },
+    {
+      "review": "배달이 너무 늦었어요.",
+      "reply": "배달 지연으로 불편을 드려 죄송합니다. 배달 시간을 줄일 수 있도록 운영 과정을 점검하겠습니다.",
+      "sub_type": "배달지연",
+      "risk_level": "medium",
+      "order_type": "delivery"
+    },
+    {
+      "review": "포장이 엉망이라 국물이 다 쏟아졌어요.",
+      "reply": "포장 상태로 불편을 드려 죄송합니다. 포장 방법을 개선하여 같은 일이 없도록 하겠습니다.",
+      "sub_type": "포장불량",
+      "risk_level": "medium",
+      "order_type": "delivery"
+    }
+  ]
+}
+

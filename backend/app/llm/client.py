@@ -76,15 +76,19 @@ class UpstageConfig:
             api_key=os.getenv("UPSTAGE_API_KEY"),
             ai_mode=os.getenv("AI_MODE", "auto"),
             base_url=os.getenv("UPSTAGE_BASE_URL", cls.base_url),
-            chat_model=os.getenv("UPSTAGE_SOLAR_MODEL", cls.chat_model),
+            chat_model=os.getenv("UPSTAGE_CHAT_MODEL", os.getenv("UPSTAGE_SOLAR_MODEL", cls.chat_model)),
             embedding_url=os.getenv("UPSTAGE_EMBEDDING_URL", cls.embedding_url),
             embedding_query_model=os.getenv(
-                "UPSTAGE_EMBEDDING_QUERY_MODEL", cls.embedding_query_model
+                "UPSTAGE_EMBEDDING_MODEL",
+                os.getenv("UPSTAGE_EMBEDDING_QUERY_MODEL", cls.embedding_query_model),
             ),
             embedding_passage_model=os.getenv(
-                "UPSTAGE_EMBEDDING_PASSAGE_MODEL", cls.embedding_passage_model
+                "UPSTAGE_EMBEDDING_MODEL",
+                os.getenv("UPSTAGE_EMBEDDING_PASSAGE_MODEL", cls.embedding_passage_model),
             ),
-            timeout_seconds=float(os.getenv("UPSTAGE_TIMEOUT_SECONDS", DEFAULT_TIMEOUT_SECONDS)),
+            timeout_seconds=float(
+                os.getenv("AI_TIMEOUT_SECONDS", os.getenv("UPSTAGE_TIMEOUT_SECONDS", DEFAULT_TIMEOUT_SECONDS))
+            ),
         )
 
 

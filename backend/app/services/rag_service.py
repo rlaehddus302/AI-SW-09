@@ -26,8 +26,8 @@ class RAGConfig:
     @classmethod
     def from_env(cls) -> "RAGConfig":
         return cls(
-            collection_name=os.getenv("CHROMA_COLLECTION", cls.collection_name),
-            persist_path=os.getenv("CHROMA_PERSIST_PATH", cls.persist_path),
+            collection_name=os.getenv("RAG_COLLECTION_NAME", os.getenv("CHROMA_COLLECTION", cls.collection_name)),
+            persist_path=os.getenv("CHROMA_PERSIST_DIR", os.getenv("CHROMA_PERSIST_PATH", cls.persist_path)),
             ai_mode=os.getenv("AI_MODE", "auto"),
         )
 
