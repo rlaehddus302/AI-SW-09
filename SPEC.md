@@ -57,7 +57,8 @@ review_helper/
 │   │   │   ├── ReviewDetailPanel.jsx # 우측 상세 패널
 │   │   │   ├── StatsCards.jsx        # 통계 요약 카드
 │   │   │   ├── TabFilter.jsx         # 홀/포장/배달 탭
-│   │   │   └── ApprovalActions.jsx   # 승인/반려 버튼
+│   │   │   ├── ApprovalActions.jsx   # 승인/반려 버튼
+│   │   │   └── Badge.jsx             # 범용 배지 컴포넌트
 │   │   ├── pages/
 │   │   │   ├── SetupPage.jsx         # 가게 정보 등록
 │   │   │   └── DashboardPage.jsx     # 메인 대시보드
@@ -65,6 +66,8 @@ review_helper/
 │   │   │   └── useWebSocket.js       # WebSocket 커스텀 훅
 │   │   ├── services/
 │   │   │   └── api.js                # API 호출 함수
+│   │   ├── constants.js              # 상태/감정 라벨·색상 매핑 상수
+│   │   ├── styles.css                # 글로벌 스타일시트
 │   │   ├── App.jsx
 │   │   └── main.jsx
 │   ├── package.json
@@ -75,7 +78,11 @@ review_helper/
 │   │   ├── main.py                   # FastAPI 앱 엔트리포인트
 │   │   ├── config.py                 # 환경 설정
 │   │   ├── database.py               # DB 연결 설정
+│   │   ├── demo.py                   # DEMO_STORE_ID 상수
+│   │   ├── ai_contract.py            # AI 서비스 Facade (지연 로딩)
+│   │   ├── openapi_examples.py       # Swagger 응답 예시
 │   │   ├── models/                   # SQLAlchemy 모델
+│   │   │   ├── enums.py              # OrderType, Sentiment 등 공유 Enum
 │   │   │   ├── store.py
 │   │   │   └── review.py
 │   │   ├── schemas/                  # Pydantic 스키마
@@ -84,7 +91,8 @@ review_helper/
 │   │   ├── routers/                  # API 라우터
 │   │   │   ├── stores.py
 │   │   │   ├── reviews.py
-│   │   │   └── analysis.py
+│   │   │   ├── analysis.py
+│   │   │   └── utils.py              # 공통 404/409 헬퍼, 모델→스키마 변환
 │   │   ├── services/                 # 비즈니스 로직
 │   │   │   ├── classification.py     # 분류 LLM
 │   │   │   ├── interpretation.py     # 해석 LLM
@@ -92,8 +100,9 @@ review_helper/
 │   │   │   ├── rag_service.py        # ChromaDB RAG
 │   │   │   └── approval_gate.py      # 승인 게이트
 │   │   ├── llm/
-│   │   │   ├── client.py             # Upstage API 클라이언트
-│   │   │   └── prompts.py            # 시스템 프롬프트 정의
+│   │   │   ├── client.py             # Upstage API 클라이언트 + Mock 클라이언트
+│   │   │   ├── prompts.py            # 시스템 프롬프트 정의
+│   │   │   └── types.py              # ClassificationResult 등 내부 dataclass
 │   │   ├── websocket/
 │   │   │   └── manager.py            # WebSocket 매니저
 │   │   └── seed/
@@ -457,6 +466,27 @@ stateDiagram-v2
 }
 ```
 
+**리뷰 상태 변경 (단계 완료 시 최신 스냅샷 전송):**
+```json
+{
+  "type": "review_updated",
+  "task_id": "task_abc123",
+  "event": "classification_completed",
+  "step": "classification",
+  "status": "completed",
+  "review_id": 1,
+  "review": { "... 최신 ReviewDetail 전체 ..." },
+  "progress": {
+    "current": 1,
+    "total": 5,
+    "percentage": 20
+  }
+}
+```
+
+> [!NOTE]
+> `review_updated` 메시지는 DB 변경이 발생한 단계(분류 완료, 해석 완료, RAG 완료, 답변 생성 완료, 승인 게이트 완료)마다 전송됩니다. 프론트엔드는 이 메시지의 `review` 필드로 UI를 즉시 갱신합니다.
+
 **작업 완료:**
 ```json
 {
@@ -478,7 +508,7 @@ stateDiagram-v2
   "task_id": "task_abc123",
   "review_id": 3,
   "error": "LLM 응답 파싱 실패",
-  "fallback_action": "수동 확인 필요로 표시됨"
+  "fallback_action": "status를 pending으로 되돌렸습니다."
 }
 ```
 
@@ -664,7 +694,8 @@ flowchart LR
     "reply_tone": "사과"
   },
   "store_info": {
-    "store_name": "맛있는 치킨집"
+    "store_name": "맛있는 치킨집",
+    "origin_info": "닭고기: 국내산, 감자: 미국산"
   },
   "rag_references": [
     {
@@ -855,10 +886,10 @@ def determine_approval(risk_level: str, sentiment: str) -> str:
 
 ### 7.3 시딩 프로세스
 
-1. FastAPI 서버 시작 시 `seed_data.json` 로드
-2. `stores` 테이블에 가게 정보 INSERT (이미 존재하면 스킵)
-3. `reviews` 테이블에 목데이터 INSERT (초기 상태 `pending`)
-4. `rag_seed_pairs`를 Upstage Embedding API로 임베딩 후 ChromaDB에 저장
+1. FastAPI 서버 시작 시 lifespan에서 `seed_data.json` 로드
+2. `stores` 테이블에 가게 정보 UPSERT (이미 존재하면 필드 업데이트)
+3. `reviews` 테이블에 목데이터 UPSERT (리뷰 텍스트 기준 매칭, 분석 상태를 초기화하여 `pending`으로 되돌림)
+4. `rag_seed_pairs`를 서버 준비 후 **비동기 백그라운드**로 임베딩 후 ChromaDB에 저장 (서버 헬스체크를 막지 않음)
 
 ---
 
