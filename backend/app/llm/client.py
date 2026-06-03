@@ -165,7 +165,7 @@ class UpstageSolarClient:
         system_prompt: str,
         user_payload: Mapping[str, Any],
         RouteDecision : Optional[Type[BaseModel]] = None
-    ) -> Any:
+    ) -> Dict[str, Any]:
         """Upstage에 JSON 응답을 요청하고 실패 시 JSON 전용 프롬프트로 한 번 재시도합니다."""
         llm = ChatUpstage(
             model=self.config.chat_model,
@@ -176,7 +176,7 @@ class UpstageSolarClient:
                         SystemMessage(content=system_prompt),
                         HumanMessage(content=json.dumps(user_payload, ensure_ascii=False))
         ])
-        return response_text
+        return response_text.to_dict()
         """
         last_error: Optional[Exception] = None
         for attempt in range(2):
@@ -284,7 +284,7 @@ class DeterministicMockAIClient:
         system_prompt: str,
         user_payload: Mapping[str, Any],
         RouteDecision: Optional[Type[BaseModel]] = None
-    ) -> Any:
+    ) -> Dict[str, Any]:
         """알려진 AI 작업명을 deterministic mock 구현으로 라우팅합니다."""
         del system_prompt
         if task == "classification":

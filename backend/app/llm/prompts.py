@@ -26,7 +26,6 @@ reply_tone 선택지:
 - "해명"
 - "단호한 대응"
 
-반드시 JSON 객체만 출력하세요.
 """.strip()
 
 REPLY_GENERATION_SYSTEM_PROMPT = """

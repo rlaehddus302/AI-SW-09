@@ -32,8 +32,9 @@ def interpret_review(
             "review_text": review_text,
             "classification": normalized_classification,
         },
+        RouteDecision=InterpretationResult
     )
-    return normalize_interpretation(raw, normalized_classification).to_dict()
+    return raw
 
 
 def analyze_review(

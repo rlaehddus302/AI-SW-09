@@ -33,16 +33,28 @@ class ClassificationResult(BaseModel):
         return self.model_dump()
 
 
-@dataclass(frozen=True)
-class InterpretationResult:
-    """리뷰 해석 단계의 정규화된 결과입니다."""
-    core_issue: str
-    action_direction: str
-    reply_tone: str
+class InterpretationResult(BaseModel):
+    """ 리뷰 해석 단계의 정규화된 결과입니다.
+        분류 결과를 바탕으로 리뷰의 핵심 이슈와 사장님이 취해야 할 행동 방향을 도출하고,
+        적절한 답변 톤을 결정합니다."""
+    model_config = {"frozen": True}
+    core_issue: str = Field(
+        description="리뷰 원문과 분류 결과를 바탕으로 분석한 고객의 '핵심 이슈' 또는 핵심 불만 사항"
+    )
+    action_direction: str = Field(
+        description="핵심 이슈를 해결하기 위해 사장님이 취해야 할 구체적인 '행동 방향' 또는 대응 전략"
+    )
+    reply_tone: Literal["감사", "사과", "해명", "단호한 대응"] = Field(
+        description="""답변에 사용할 가장 적절한 톤앤매너입니다. 반드시 아래 4가지 선택지 중 하나만 선택해야 합니다:
+        - '감사': 긍정적인 리뷰나 칭찬에 대해 고마움을 표현할 때
+        - '사과': 서비스나 품질 저하 등 고객의 정당한 불만에 대해 고개를 숙일 때
+        - '해명': 오해나 사실과 다른 부분에 대해 정중하고 객관적으로 설명할 때
+        - '단호한 대응': 악성 리뷰, 허위 사실, 블랙컨슈머에 대해 엄격하고 단호하게 대처할 때"""
+    )
 
     def to_dict(self) -> Dict[str, Any]:
         """라우터와 테스트가 사용하는 dict 계약으로 변환합니다."""
-        return asdict(self)
+        return self.model_dump()
 
 
 @dataclass(frozen=True)
