@@ -10,8 +10,10 @@ import socket
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
-from typing import Any, Callable, Dict, List, Mapping, Optional, Protocol
-
+from typing import Any, Callable, Dict, List, Mapping, Optional, Protocol, Type
+from langchain_upstage import ChatUpstage
+from langchain_core.messages import SystemMessage, HumanMessage
+from pydantic import BaseModel
 
 ALLOWED_AI_MODES = {"live", "mock"}
 DEFAULT_TIMEOUT_SECONDS = 30.0
@@ -47,7 +49,8 @@ class AIClientProtocol(Protocol):
         task: str,
         system_prompt: str,
         user_payload: Mapping[str, Any],
-    ) -> Dict[str, Any]:
+        RouteDecision: Optional[Type[BaseModel]] = None
+    ) -> Any:
         """LLM 작업 1건의 결과를 JSON 객체로 반환합니다."""
         ...
 
@@ -161,8 +164,20 @@ class UpstageSolarClient:
         task: str,
         system_prompt: str,
         user_payload: Mapping[str, Any],
-    ) -> Dict[str, Any]:
+        RouteDecision : Optional[Type[BaseModel]] = None
+    ) -> Any:
         """Upstage에 JSON 응답을 요청하고 실패 시 JSON 전용 프롬프트로 한 번 재시도합니다."""
+        llm = ChatUpstage(
+            model=self.config.chat_model,
+            upstage_api_key=self.config.api_key  
+        )
+        structured_llm = llm.with_structured_output(RouteDecision)
+        response_text = structured_llm.invoke([
+                        SystemMessage(content=system_prompt),
+                        HumanMessage(content=json.dumps(user_payload, ensure_ascii=False))
+        ])
+        return response_text
+        """
         last_error: Optional[Exception] = None
         for attempt in range(2):
             response_text = self._complete_text(
@@ -178,7 +193,7 @@ class UpstageSolarClient:
         raise LLMResponseParseError(
             f"{task} response was not valid JSON after one retry"
         ) from last_error
-
+        """
     def embed_text(self, text: str, *, purpose: str = "query") -> List[float]:
         """query/passage 목적에 맞는 임베딩 모델로 텍스트를 벡터화합니다."""
         if not text or not text.strip():
@@ -268,7 +283,8 @@ class DeterministicMockAIClient:
         task: str,
         system_prompt: str,
         user_payload: Mapping[str, Any],
-    ) -> Dict[str, Any]:
+        RouteDecision: Optional[Type[BaseModel]] = None
+    ) -> Any:
         """알려진 AI 작업명을 deterministic mock 구현으로 라우팅합니다."""
         del system_prompt
         if task == "classification":

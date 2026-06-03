@@ -27,7 +27,7 @@ def classify_review(
     review_text: str,
     *,
     client: Optional[AIClientProtocol] = None,
-) -> Dict[str, Any]:
+) -> ClassificationResult:
     """리뷰 텍스트를 감정, 세부 유형, 위험도로 분류합니다."""
     _require_review_text(review_text)
     ai_client = client or create_ai_client()
@@ -35,12 +35,13 @@ def classify_review(
         task="classification",
         system_prompt=CLASSIFICATION_SYSTEM_PROMPT,
         user_payload={"review_text": review_text},
+        RouteDecision=ClassificationResult
     )
-    return normalize_classification(raw).to_dict()
+    return raw
 
-
+"""
 def normalize_classification(raw: Mapping[str, Any]) -> ClassificationResult:
-    """모델 출력값을 허용된 enum 후보와 안전한 기본값으로 정규화합니다."""
+    모델 출력값을 허용된 enum 후보와 안전한 기본값으로 정규화합니다.
     sentiment = str(raw.get("sentiment") or "").strip().lower()
     if sentiment not in ALLOWED_SENTIMENTS:
         sentiment = "negative"
@@ -66,7 +67,7 @@ def normalize_classification(raw: Mapping[str, Any]) -> ClassificationResult:
         sub_type=sub_type,
         risk_level=risk_level,
     )
-
+"""
 
 def _require_review_text(review_text: str) -> None:
     """AI 호출 전 빈 리뷰 텍스트를 차단합니다."""

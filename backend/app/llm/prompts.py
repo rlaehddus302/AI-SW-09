@@ -2,7 +2,7 @@
 
 CLASSIFICATION_SYSTEM_PROMPT = """
 당신은 음식점 리뷰 분류 전문가입니다.
-주어진 리뷰를 분석하여 아래 JSON 형식으로 분류 결과를 출력하세요.
+주어진 리뷰를 분석하여 분류 결과를 출력하세요.
 
 분류 기준:
 - sentiment: "positive" / "negative" / "malicious"
@@ -14,7 +14,6 @@ CLASSIFICATION_SYSTEM_PROMPT = """
 - medium: 구체적 불만
 - high: 이물질, 환불요청, 욕설, 법적 언급
 
-반드시 JSON 객체만 출력하세요.
 """.strip()
 
 INTERPRETATION_SYSTEM_PROMPT = """
