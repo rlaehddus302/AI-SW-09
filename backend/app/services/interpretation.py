@@ -34,7 +34,7 @@ def interpret_review(
         },
         RouteDecision=InterpretationResult
     )
-    return raw.to_dict()
+    return raw
 
 
 def analyze_review(
