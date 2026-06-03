@@ -4,13 +4,15 @@ services:
     container_name: review-helper-mysql
     restart: unless-stopped
     environment:
-      MYSQL_DATABASE: ${MYSQL_DATABASE:-review_helper}
-      MYSQL_USER: ${MYSQL_USER:-review_user}
-      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-review_password}
-      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-review_root_password}
+    #  MYSQL_DATABASE: ${MYSQL_DATABASE:-review_helper}
+    # MYSQL_USER: ${MYSQL_USER:-review_user}
+    #  MYSQL_PASSWORD: ${MYSQL_PASSWORD:-review_password}
+    #  MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-review_root_password}
       TZ: Asia/Seoul
+    env_file:
+      - ./.env.example
     ports:
-      - "3306:3306"
+      - "3306"
     volumes:
       - mysql_data:/var/lib/mysql
     healthcheck:
@@ -18,6 +20,24 @@ services:
       interval: 10s
       timeout: 5s
       retries: 10
-
+  backend:
+    build: ./backend
+    env_file:
+      - ./.env.example
+    ports:
+      - "8000:8000"
+    depends_on:
+      mysql:
+        condition : service_healthy
+  frontend:
+    build: ./frontend
+    env_file:
+      - ./.env.example
+    ports:
+      - "5173:5173"
+    stdin_open: true
+    tty : true
+    depends_on:
+      - backend
 volumes:
   mysql_data:
