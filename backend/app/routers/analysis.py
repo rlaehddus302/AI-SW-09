@@ -359,7 +359,15 @@ async def run_generation_task(
     semaphore = asyncio.Semaphore(MAX_CONCURRENT_REVIEW_TASKS)
     with SessionLocal() as db:
         store = get_store_or_404(db, store_id)
-        store_info = {"store_name": store.store_name, "origin_info": store.origin_info}
+        store_info = {
+            "store_name": store.store_name,
+            "origin_info": store.origin_info,
+            "reply_tone_style": store.reply_tone_style,
+            "reply_opening": store.reply_opening,
+            "reply_closing": store.reply_closing,
+            "reply_emphasis": store.reply_emphasis,
+            "reply_forbidden": store.reply_forbidden,
+        }
 
     async def process_review(review_id: int) -> None:
         """리뷰 하나에 대해 RAG 검색, 답변 생성, 승인 게이트를 실행합니다."""

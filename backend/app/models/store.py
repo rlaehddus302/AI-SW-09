@@ -20,6 +20,13 @@ class Store(Base):
     is_dine_in: Mapped[bool] = mapped_column(default=False, nullable=False)
     is_takeout: Mapped[bool] = mapped_column(default=False, nullable=False)
     is_delivery: Mapped[bool] = mapped_column(default=False, nullable=False)
+    reply_tone_style: Mapped[str] = mapped_column(
+        String(20), default="neutral", server_default="neutral", nullable=False
+    )
+    reply_opening: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    reply_closing: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    reply_emphasis: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    reply_forbidden: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)
 
     reviews: Mapped[list["Review"]] = relationship(

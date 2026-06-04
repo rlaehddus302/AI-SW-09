@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any, Dict, Mapping, Optional, Sequence
 
 from ..llm.client import AIClientProtocol, LLMResponseParseError, create_ai_client
-from ..llm.prompts import REPLY_GENERATION_SYSTEM_PROMPT
+from ..llm.prompts import build_reply_generation_prompt
 from ..llm.types import ReplyGenerationResult
 from .approval_gate import determine_approval
 from .interpretation import normalize_interpretation
@@ -44,7 +44,7 @@ def generate_reply(
     try:
         raw = ai_client.complete_json(
             task="reply_generation",
-            system_prompt=REPLY_GENERATION_SYSTEM_PROMPT,
+            system_prompt=build_reply_generation_prompt(store_info),
             user_payload={
                 "review_text": review_text,
                 "interpretation": normalized_interpretation,
