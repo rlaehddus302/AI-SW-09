@@ -429,6 +429,7 @@ async def run_generation_task(
                         interpretation=parse_json_object(review.interpretation) or {},
                         store_info=store_info,
                         rag_references=rag_references,
+                        sentiment=review.sentiment.value if review.sentiment else None,
                     )
                     reply_text = raw_reply.get("reply_text") if isinstance(raw_reply, dict) else None
                     if not reply_text:

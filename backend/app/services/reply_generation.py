@@ -28,6 +28,7 @@ def generate_reply(
     interpretation: Mapping[str, Any],
     store_info: Mapping[str, Any],
     *,
+    sentiment: Optional[str] = None,
     rag_references: Optional[Sequence[Mapping[str, Any]]] = None,
     client: Optional[AIClientProtocol] = None,
 ) -> Dict[str, Any]:
@@ -44,7 +45,7 @@ def generate_reply(
     try:
         raw = ai_client.complete_json(
             task="reply_generation",
-            system_prompt=build_reply_generation_prompt(store_info),
+            system_prompt=build_reply_generation_prompt(store_info, sentiment),
             user_payload={
                 "review_text": review_text,
                 "interpretation": normalized_interpretation,
@@ -92,6 +93,7 @@ def generate_reply_pipeline(
         review_text,
         interpretation,
         store_info,
+        sentiment=classification.get("sentiment"),
         rag_references=references,
         client=ai_client,
     )
