@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Optional
+from typing import Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -16,6 +16,11 @@ class StoreBase(BaseModel):
     is_dine_in: bool = False
     is_takeout: bool = False
     is_delivery: bool = False
+    reply_tone_style: Literal["friendly", "formal", "neutral"] = "neutral"
+    reply_opening: Optional[str] = Field(default=None, max_length=200)
+    reply_closing: Optional[str] = Field(default=None, max_length=200)
+    reply_emphasis: Optional[str] = Field(default=None, max_length=300)
+    reply_forbidden: Optional[str] = Field(default=None, max_length=300)
 
     model_config = ConfigDict(json_schema_extra={"example": STORE_REQUEST_EXAMPLE})
 

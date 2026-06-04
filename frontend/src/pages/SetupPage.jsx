@@ -8,6 +8,11 @@ const defaultForm = {
   is_dine_in: true,
   is_takeout: true,
   is_delivery: true,
+  reply_tone_style: 'neutral',
+  reply_opening: '',
+  reply_closing: '',
+  reply_emphasis: '',
+  reply_forbidden: '',
 };
 
 export default function SetupPage({ onComplete }) {
@@ -26,6 +31,11 @@ export default function SetupPage({ onComplete }) {
       is_dine_in: true,
       is_takeout: true,
       is_delivery: true,
+      reply_tone_style: 'friendly',
+      reply_opening: '안녕하세요! 민트치킨 성수점입니다 :)',
+      reply_closing: '항상 감사합니다. 또 찾아주세요!',
+      reply_emphasis: '국내산 신선 재료만 사용합니다',
+      reply_forbidden: '',
     });
   };
 
@@ -49,6 +59,10 @@ export default function SetupPage({ onComplete }) {
         ...form,
         store_name: form.store_name.trim(),
         origin_info: form.origin_info.trim(),
+        reply_opening: form.reply_opening.trim(),
+        reply_closing: form.reply_closing.trim(),
+        reply_emphasis: form.reply_emphasis.trim(),
+        reply_forbidden: form.reply_forbidden.trim(),
       });
       storeIdStorage.set(store.id);
       onComplete();
@@ -139,6 +153,79 @@ export default function SetupPage({ onComplete }) {
               />
               <Bike size={18} aria-hidden="true" />
               배달
+            </label>
+          </fieldset>
+
+          <fieldset className="style-section">
+            <legend>답변 스타일 설정</legend>
+            <p className="section-hint">답변 생성 시 AI가 아래 설정을 자동으로 반영합니다.</p>
+
+            <div>
+              <div className="field" style={{ marginBottom: 10 }}>
+                <span>말투</span>
+              </div>
+              <div className="tone-options">
+                {[
+                  { value: 'neutral', label: '기본', desc: '자동 판단' },
+                  { value: 'friendly', label: '친근하게', desc: '따뜻하고 가깝게' },
+                  { value: 'formal', label: '격식체', desc: '정중하고 공손하게' },
+                ].map(({ value, label, desc }) => (
+                  <div className="tone-option" key={value}>
+                    <input
+                      type="radio"
+                      id={`tone-${value}`}
+                      name="reply_tone_style"
+                      value={value}
+                      checked={form.reply_tone_style === value}
+                      onChange={(event) => update('reply_tone_style', event.target.value)}
+                    />
+                    <label htmlFor={`tone-${value}`}>
+                      {label}
+                      <small>{desc}</small>
+                    </label>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <label className="field">
+              <span>시작 문구 <small style={{ fontWeight: 400, color: 'var(--muted)' }}>(선택)</small></span>
+              <input
+                value={form.reply_opening}
+                onChange={(event) => update('reply_opening', event.target.value)}
+                placeholder="예: 안녕하세요! 맛있는 치킨집입니다"
+                maxLength={200}
+              />
+            </label>
+
+            <label className="field">
+              <span>마무리 문구 <small style={{ fontWeight: 400, color: 'var(--muted)' }}>(선택)</small></span>
+              <input
+                value={form.reply_closing}
+                onChange={(event) => update('reply_closing', event.target.value)}
+                placeholder="예: 다음에 또 방문해주세요!"
+                maxLength={200}
+              />
+            </label>
+
+            <label className="field">
+              <span>강조할 가게 특징 <small style={{ fontWeight: 400, color: 'var(--muted)' }}>(선택)</small></span>
+              <input
+                value={form.reply_emphasis}
+                onChange={(event) => update('reply_emphasis', event.target.value)}
+                placeholder="예: 신선한 재료만 사용합니다"
+                maxLength={300}
+              />
+            </label>
+
+            <label className="field">
+              <span>금지 표현 <small style={{ fontWeight: 400, color: 'var(--muted)' }}>(선택)</small></span>
+              <input
+                value={form.reply_forbidden}
+                onChange={(event) => update('reply_forbidden', event.target.value)}
+                placeholder="예: 환불 불가, 저희 잘못 아님"
+                maxLength={300}
+              />
             </label>
           </fieldset>
 

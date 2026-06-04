@@ -68,6 +68,7 @@ async def generate_reply(
     interpretation: dict[str, Any],
     store_info: dict[str, Any],
     rag_references: list[dict[str, Any]],
+    sentiment: Optional[str] = None,
 ) -> dict[str, Any]:
     """분석된 리뷰 1건에 대한 사장님 답변 초안을 생성합니다."""
     func = _load_callable("app.services.reply_generation", "generate_reply")
@@ -77,6 +78,7 @@ async def generate_reply(
             interpretation=interpretation,
             store_info=store_info,
             rag_references=rag_references,
+            sentiment=sentiment,
         )
     )
 

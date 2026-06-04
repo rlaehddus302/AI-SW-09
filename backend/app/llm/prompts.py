@@ -1,5 +1,9 @@
 """리뷰 AI 파이프라인에서 사용하는 시스템 프롬프트입니다."""
 
+from __future__ import annotations
+
+from typing import Any, Mapping, Optional
+
 CLASSIFICATION_SYSTEM_PROMPT = """
 당신은 음식점 리뷰 분류 전문가입니다.
 주어진 리뷰를 분석하여 분류 결과를 출력하세요.
@@ -51,3 +55,71 @@ REPLY_GENERATION_SYSTEM_PROMPT = """
 reply_text는 빈 문자열이면 안 됩니다.
 마크다운 코드블록, 설명 문장, 추가 키는 출력하지 마세요.
 """.strip()
+
+_TONE_STYLE_INSTRUCTIONS: dict[str, str] = {
+    "friendly": "친근하고 따뜻한 말투로 작성하세요.",
+    "formal": "정중하고 격식 있는 말투로 작성하세요.",
+    "neutral": "",
+}
+
+
+def build_reply_generation_prompt(
+    store_info: Optional[Mapping[str, Any]] = None,
+    sentiment: Optional[str] = None,
+) -> str:
+    """가게 스타일 설정과 리뷰 감정을 반영한 답변 생성 시스템 프롬프트를 생성합니다.
+
+    - sentiment="positive" : 시작·마무리 문구 적극 활용, 강조 특징 자연스럽게 언급
+    - sentiment="negative"/"malicious" : 마무리 문구·강조 특징은 흐름에 맞을 때만 사용
+    - store_info가 없거나 스타일 필드가 모두 비어 있으면 기본 프롬프트를 그대로 반환
+    """
+    if not store_info:
+        return REPLY_GENERATION_SYSTEM_PROMPT
+
+    is_positive = (sentiment or "").strip().lower() == "positive"
+
+    lines: list[str] = []
+
+    # 말투 — 전체 답변에 일관되게 적용
+    tone = (store_info.get("reply_tone_style") or "neutral").strip()
+    tone_instruction = _TONE_STYLE_INSTRUCTIONS.get(tone, "")
+    if tone_instruction:
+        lines.append(f"- 말투: {tone_instruction} 전체 답변에 일관되게 유지하세요.")
+
+    # 시작 문구 — 항상 사용 (글의 흐름에 무관)
+    opening = (store_info.get("reply_opening") or "").strip()
+    if opening:
+        lines.append(f'- 시작 문구: 답변은 반드시 "{opening}"으로 시작하세요.')
+
+    # 마무리 문구 — 긍정이면 반드시, 부정·악성이면 흐름 판단 후 사용
+    closing = (store_info.get("reply_closing") or "").strip()
+    if closing:
+        if is_positive:
+            lines.append(f'- 마무리 문구: 답변은 반드시 "{closing}"으로 끝맺으세요.')
+        else:
+            lines.append(
+                f'- 마무리 문구: "{closing}"을 참고하되 글의 흐름에 자연스러울 때만 사용하세요. '
+                "사과·해명 내용에 어울리지 않으면 생략하세요."
+            )
+
+    # 강조 특징 — 긍정이면 자연스럽게, 부정·악성이면 리뷰와 연관 있을 때만
+    emphasis = (store_info.get("reply_emphasis") or "").strip()
+    if emphasis:
+        if is_positive:
+            lines.append(f'- 가게 특징: "{emphasis}"를 답변에 자연스럽게 녹여서 언급하세요.')
+        else:
+            lines.append(
+                f'- 가게 특징: "{emphasis}"는 리뷰 내용과 연관이 있을 때만 자연스럽게 언급하세요. '
+                "관련이 없으면 억지로 포함하지 말고 생략하세요."
+            )
+
+    # 금지 표현 — 절대 사용 금지, 예외 없음
+    forbidden = (store_info.get("reply_forbidden") or "").strip()
+    if forbidden:
+        lines.append(f'- 금지 표현: "{forbidden}"은 어떤 경우에도 절대 사용하지 마세요.')
+
+    if not lines:
+        return REPLY_GENERATION_SYSTEM_PROMPT
+
+    style_block = "\n\n사장님 답변 스타일 설정 (반드시 준수):\n" + "\n".join(lines)
+    return REPLY_GENERATION_SYSTEM_PROMPT + style_block

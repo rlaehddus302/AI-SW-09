@@ -164,20 +164,21 @@ class UpstageSolarClient:
         task: str,
         system_prompt: str,
         user_payload: Mapping[str, Any],
-        RouteDecision : Optional[Type[BaseModel]] = None
+        RouteDecision: Optional[Type[BaseModel]] = None,
     ) -> Dict[str, Any]:
-        """Upstage에 JSON 응답을 요청하고 실패 시 JSON 전용 프롬프트로 한 번 재시도합니다."""
-        llm = ChatUpstage(
-            model=self.config.chat_model,
-            upstage_api_key=self.config.api_key  
-        )
-        structured_llm = llm.with_structured_output(RouteDecision)
-        response_text = structured_llm.invoke([
-                        SystemMessage(content=system_prompt),
-                        HumanMessage(content=json.dumps(user_payload, ensure_ascii=False))
-        ])
-        return response_text.to_dict()
-        """
+        """RouteDecision 스키마가 있으면 structured output, 없으면 텍스트 파싱으로 JSON을 반환합니다."""
+        if RouteDecision is not None:
+            llm = ChatUpstage(
+                model=self.config.chat_model,
+                upstage_api_key=self.config.api_key,
+            )
+            structured_llm = llm.with_structured_output(RouteDecision)
+            response = structured_llm.invoke([
+                SystemMessage(content=system_prompt),
+                HumanMessage(content=json.dumps(user_payload, ensure_ascii=False)),
+            ])
+            return response.to_dict()
+
         last_error: Optional[Exception] = None
         for attempt in range(2):
             response_text = self._complete_text(
@@ -193,7 +194,7 @@ class UpstageSolarClient:
         raise LLMResponseParseError(
             f"{task} response was not valid JSON after one retry"
         ) from last_error
-        """
+
     def embed_text(self, text: str, *, purpose: str = "query") -> List[float]:
         """query/passage 목적에 맞는 임베딩 모델로 텍스트를 벡터화합니다."""
         if not text or not text.strip():
