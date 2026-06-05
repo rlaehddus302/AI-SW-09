@@ -295,6 +295,8 @@ class DeterministicMockAIClient:
                 str(user_payload.get("review_text", "")),
                 _as_mapping(user_payload.get("classification")),
             )
+        if task == "analysis":
+            return _mock_analysis(str(user_payload.get("review_text", "")))
         if task == "reply_generation":
             return _mock_reply_generation(
                 str(user_payload.get("review_text", "")),
@@ -442,6 +444,10 @@ def _mock_interpretation(
         "reply_tone": "사과",
     }
 
+def _mock_analysis(review_text: str) -> dict:
+    classification = _mock_classification(review_text)
+    interpretation = _mock_interpretation(review_text, classification)
+    return {**classification, **interpretation}
 
 def _mock_reply_generation(
     review_text: str,

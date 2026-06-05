@@ -244,13 +244,14 @@ async def run_analysis_task(task_id: str, store_id: int, review_ids: list[int]) 
                         message_type="analysis_progress",
                         task_id=task_id,
                         review_id=review.id,
-                        step="classification",
+                        step="analyzation",
                         step_status="started",
                         current=summary["completed"],
                         total=total,
                     )
-                    raw_classification = await _call_with_retry(ai_contract.classify_review, review.review_text)
-                    classification = _classification_payload(raw_classification)
+
+                    raw_analysis = await _call_with_retry(ai_contract.analyze_review, review.review_text)
+                    classification = _classification_payload(raw_analysis)
                     review.sentiment = Sentiment(classification["sentiment"])
                     review.sub_type = classification["sub_type"]
                     review.risk_level = RiskLevel(classification["risk_level"])
@@ -266,23 +267,7 @@ async def run_analysis_task(task_id: str, store_id: int, review_ids: list[int]) 
                         current=summary["completed"],
                         total=total,
                     )
-
-                    await _broadcast_progress(
-                        store_id,
-                        message_type="analysis_progress",
-                        task_id=task_id,
-                        review_id=review.id,
-                        step="interpretation",
-                        step_status="started",
-                        current=summary["completed"],
-                        total=total,
-                    )
-                    raw_interpretation = await _call_with_retry(
-                        ai_contract.interpret_review,
-                        review.review_text,
-                        classification,
-                    )
-                    interpretation = _interpretation_payload(raw_interpretation)
+                    interpretation = _interpretation_payload(raw_analysis)
                     review.interpretation = json.dumps(interpretation, ensure_ascii=False)
                     review.reply_tone = interpretation.get("reply_tone")
                     review.status = ReviewStatus.ANALYZED
