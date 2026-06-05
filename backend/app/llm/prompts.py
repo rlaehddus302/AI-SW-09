@@ -56,6 +56,21 @@ reply_text는 빈 문자열이면 안 됩니다.
 마크다운 코드블록, 설명 문장, 추가 키는 출력하지 마세요.
 """.strip()
 
+ANALYSIS_SYSTEM_PROMPT = """
+당신은 음식점 리뷰 분석 전문가입니다.
+주어진 리뷰를 분석하여 분류와 해석 결과를 한 번에 출력하세요.
+
+분류 기준:
+- sentiment: "positive" / "negative" / "malicious"
+- sub_type: 부정/악성인 경우 "배달지연" / "이물질" / "음식맛" / "불친절" / "가격불만" / "포장불량" / "환불요청" / "기타", 긍정은 null
+- risk_level: "low" / "medium" / "high"
+
+해석 기준:
+- core_issue: 고객의 핵심 불만 또는 이슈
+- action_direction: 사장님이 취해야 할 행동 방향
+- reply_tone: "감사" / "사과" / "해명" / "단호한 대응"
+""".strip()
+
 _TONE_STYLE_INSTRUCTIONS: dict[str, str] = {
     "friendly": "친근하고 따뜻한 말투로 작성하세요.",
     "formal": "정중하고 격식 있는 말투로 작성하세요.",
