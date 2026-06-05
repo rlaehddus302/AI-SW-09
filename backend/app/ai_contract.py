@@ -40,6 +40,10 @@ async def interpret_review(review_text: str, classification: dict[str, Any]) -> 
     func = _load_callable("app.services.interpretation", "interpret_review")
     return await _maybe_await(func(review_text=review_text, classification=classification))
 
+async def analyze_review(review_text: str) -> dict[str, Any]:
+    """설정된 분류 및 해석 서비스로 리뷰 1건을 분류 및 해석합니다."""
+    func = _load_callable("app.services.analyzation", "analyze_review")
+    return await _maybe_await(func(review_text=review_text))
 
 async def search_rag_references(
     *,
