@@ -107,6 +107,14 @@ function formatProgressActivity(message) {
   const current = message.progress?.current ?? 0;
   const total = message.progress?.total ?? 0;
   const percentage = message.progress?.percentage ?? 0;
+
+  if (message.step === 'self_review' && message.status !== 'started') {
+    const resultLabel = message.status === 'passed'
+      ? '통과'
+      : `실패${message.reason ? ` — ${message.reason}` : ''}`;
+    return `${taskLabel}: ${stepLabel} ${resultLabel} (${message.attempt}회차)`;
+  }
+
   return `${taskLabel}: ${stepLabel} ${current}/${total} (${percentage}%)`;
 }
 

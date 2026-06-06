@@ -442,8 +442,8 @@ async def run_generation_task(
                             review_id=review.id,
                             step="self_review",
                             step_status="started",
-                            current=summary["completed"],
-                            total=total,
+                            current=_attempt,
+                            total=_MAX_SELF_REVIEW_RETRIES + 1,
                         )
                         _sr_result = await _call_with_retry(
                             ai_contract.self_review,
