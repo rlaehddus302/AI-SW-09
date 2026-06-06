@@ -45,6 +45,7 @@ const stepLabels = {
   interpretation: '해석',
   rag_search: '유사 사례 검색',
   reply_generation: '답변 작성',
+  self_review: '자기 점검',
   approval_gate: '승인 기준 확인',
   analysis: '분석',
   generation: '답변 생성',
