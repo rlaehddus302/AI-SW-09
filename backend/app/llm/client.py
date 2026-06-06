@@ -304,6 +304,11 @@ class DeterministicMockAIClient:
                 _as_mapping(user_payload.get("store_info")),
                 list(user_payload.get("rag_references") or []),
             )
+        if task == "self_review":
+            return _mock_self_review(
+                str(user_payload.get("reply_text", "")),
+                str(user_payload.get("forbidden_expressions", "")),
+            )
         raise ValueError(f"unknown mock task: {task}")
 
     def embed_text(self, text: str, *, purpose: str = "query") -> List[float]:
@@ -486,6 +491,17 @@ def _mock_reply_generation(
         )
 
     return {"reply_text": reply[:500]}
+
+
+def _mock_self_review(reply_text: str, forbidden_expressions: str) -> Dict[str, Any]:
+    """mock 모드에서 길이 초과와 금지 표현 포함 여부만 체크합니다."""
+    if len(reply_text) > 500:
+        return {"passed": False, "reason": "답변이 500자를 초과합니다."}
+    if forbidden_expressions:
+        for expr in (e.strip() for e in forbidden_expressions.split(",") if e.strip()):
+            if expr in reply_text:
+                return {"passed": False, "reason": f"금지 표현이 포함되어 있습니다: {expr}"}
+    return {"passed": True, "reason": None}
 
 
 def _stable_text_embedding(text: str, dimensions: int = 64) -> List[float]:
