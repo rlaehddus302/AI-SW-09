@@ -45,6 +45,7 @@ const stepLabels = {
   interpretation: '해석',
   rag_search: '유사 사례 검색',
   reply_generation: '답변 작성',
+  self_review: '자기 점검',
   approval_gate: '승인 기준 확인',
   analysis: '분석',
   generation: '답변 생성',
@@ -106,6 +107,14 @@ function formatProgressActivity(message) {
   const current = message.progress?.current ?? 0;
   const total = message.progress?.total ?? 0;
   const percentage = message.progress?.percentage ?? 0;
+
+  if (message.step === 'self_review' && message.status !== 'started') {
+    const resultLabel = message.status === 'passed'
+      ? '통과'
+      : `실패${message.reason ? ` — ${message.reason}` : ''}`;
+    return `${taskLabel}: ${stepLabel} ${resultLabel} (${message.attempt}회차)`;
+  }
+
   return `${taskLabel}: ${stepLabel} ${current}/${total} (${percentage}%)`;
 }
 
