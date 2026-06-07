@@ -45,6 +45,7 @@ from app.websocket import manager
 
 router = APIRouter(prefix="/stores/{store_id}/reviews", tags=["analysis"])
 MAX_CONCURRENT_REVIEW_TASKS = 4
+_MAX_SELF_REVIEW_RETRIES = 2
 
 
 def _task_id() -> str:
@@ -398,40 +399,74 @@ async def run_generation_task(
                         total=total,
                     )
 
-                    await _broadcast_progress(
-                        store_id,
-                        message_type="generation_progress",
-                        task_id=task_id,
-                        review_id=review.id,
-                        step="reply_generation",
-                        step_status="started",
-                        current=summary["completed"],
-                        total=total,
-                    )
-                    raw_reply = await _call_with_retry(
-                        ai_contract.generate_reply,
-                        review_text=review.review_text,
-                        interpretation=parse_json_object(review.interpretation) or {},
-                        store_info=store_info,
-                        rag_references=rag_references,
-                        sentiment=review.sentiment.value if review.sentiment else None,
-                    )
-                    reply_text = raw_reply.get("reply_text") if isinstance(raw_reply, dict) else None
-                    if not reply_text:
-                        raise ValueError("reply_text is empty")
-                    review.reply_text = str(reply_text)[:500]
-                    db.commit()
-                    db.refresh(review)
-                    await _broadcast_review_updated(
-                        store_id,
-                        task_id=task_id,
-                        review=review,
-                        event="reply_generation_completed",
-                        step="reply_generation",
-                        step_status="completed",
-                        current=summary["completed"],
-                        total=total,
-                    )
+                    _sr_forbidden = (store_info.get("reply_forbidden") or "").strip() or None
+                    for _attempt in range(_MAX_SELF_REVIEW_RETRIES + 1):
+                        await _broadcast_progress(
+                            store_id,
+                            message_type="generation_progress",
+                            task_id=task_id,
+                            review_id=review.id,
+                            step="reply_generation",
+                            step_status="started",
+                            current=summary["completed"],
+                            total=total,
+                        )
+                        raw_reply = await _call_with_retry(
+                            ai_contract.generate_reply,
+                            review_text=review.review_text,
+                            interpretation=parse_json_object(review.interpretation) or {},
+                            store_info=store_info,
+                            rag_references=rag_references,
+                            sentiment=review.sentiment.value if review.sentiment else None,
+                        )
+                        reply_text = raw_reply.get("reply_text") if isinstance(raw_reply, dict) else None
+                        if not reply_text:
+                            raise ValueError("reply_text is empty")
+                        review.reply_text = str(reply_text)[:500]
+                        db.commit()
+                        db.refresh(review)
+                        await _broadcast_review_updated(
+                            store_id,
+                            task_id=task_id,
+                            review=review,
+                            event="reply_generation_completed",
+                            step="reply_generation",
+                            step_status="completed",
+                            current=summary["completed"],
+                            total=total,
+                        )
+                        await _broadcast_progress(
+                            store_id,
+                            message_type="generation_progress",
+                            task_id=task_id,
+                            review_id=review.id,
+                            step="self_review",
+                            step_status="started",
+                            current=_attempt,
+                            total=_MAX_SELF_REVIEW_RETRIES + 1,
+                        )
+                        _sr_result = await _call_with_retry(
+                            ai_contract.self_review,
+                            reply_text=review.reply_text,
+                            sentiment=review.sentiment.value if review.sentiment else None,
+                            forbidden=_sr_forbidden,
+                        )
+                        _sr_passed = bool(_sr_result.get("passed", True))
+                        await manager.broadcast(
+                            store_id,
+                            {
+                                "type": "generation_progress",
+                                "task_id": task_id,
+                                "review_id": review.id,
+                                "step": "self_review",
+                                "status": "passed" if _sr_passed else "failed",
+                                "reason": _sr_result.get("reason"),
+                                "attempt": _attempt + 1,
+                                "progress": _progress(summary["completed"], total),
+                            },
+                        )
+                        if _sr_passed or _attempt == _MAX_SELF_REVIEW_RETRIES:
+                            break
 
                     await _broadcast_progress(
                         store_id,

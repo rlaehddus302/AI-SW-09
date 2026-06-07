@@ -87,6 +87,19 @@ async def generate_reply(
     )
 
 
+async def self_review(
+    *,
+    reply_text: str,
+    sentiment: Optional[str] = None,
+    forbidden: Optional[str] = None,
+) -> dict[str, Any]:
+    """생성된 답변을 LLM이 스스로 점검하고 통과/실패 결과를 반환합니다."""
+    func = _load_callable("app.services.reply_generation", "self_review")
+    return await _maybe_await(
+        func(reply_text=reply_text, sentiment=sentiment, forbidden=forbidden)
+    )
+
+
 async def save_approved_reply(
     *,
     review: str,
