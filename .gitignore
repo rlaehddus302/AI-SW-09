@@ -20,5 +20,4 @@ test-results/
 .chroma/
 data/mysql/
 *.log
-Dockerfile
 

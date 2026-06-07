@@ -12,8 +12,9 @@ import urllib.request
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, Mapping, Optional, Protocol, Type
 from langchain_upstage import ChatUpstage
-from langchain_core.messages import SystemMessage, HumanMessage
+from langchain_core.messages import SystemMessage, HumanMessage, ToolMessage
 from pydantic import BaseModel
+from .tools import check_length_N_forbidden
 
 ALLOWED_AI_MODES = {"live", "mock"}
 DEFAULT_TIMEOUT_SECONDS = 30.0
@@ -167,11 +168,12 @@ class UpstageSolarClient:
         RouteDecision: Optional[Type[BaseModel]] = None,
     ) -> Dict[str, Any]:
         """RouteDecision 스키마가 있으면 structured output, 없으면 텍스트 파싱으로 JSON을 반환합니다."""
-        if RouteDecision is not None:
-            llm = ChatUpstage(
+        llm = ChatUpstage(
                 model=self.config.chat_model,
                 upstage_api_key=self.config.api_key,
+                temperature=0.2
             )
+        if RouteDecision is not None:
             structured_llm = llm.with_structured_output(RouteDecision)
             response = structured_llm.invoke([
                 SystemMessage(content=system_prompt),
@@ -180,14 +182,25 @@ class UpstageSolarClient:
             return response.to_dict()
 
         last_error: Optional[Exception] = None
+        messages = [SystemMessage(content=system_prompt),
+                    HumanMessage(content=json.dumps(user_payload, ensure_ascii=False))]
+        if task == "self_review":
+            llm_with_tools = llm.bind_tools([check_length_N_forbidden])
+            response = llm_with_tools.invoke(messages)
+            messages.append(response)
+            if response.tool_calls:
+                for call in response.tool_calls:
+                    result = check_length_N_forbidden.invoke(call["args"])   
+                    messages.append(ToolMessage(content=json.dumps(result), tool_call_id=call["id"]))
         for attempt in range(2):
-            response_text = self._complete_text(
-                system_prompt=system_prompt,
-                user_payload=user_payload,
-                retry_json_only=attempt == 1,
-            )
+            if attempt == 1:                      
+                system_prompt = (
+                    f"{system_prompt}\n\n이전 응답은 JSON 파싱에 실패했습니다. "
+                    "설명 없이 유효한 JSON 객체만 다시 출력하세요."
+                )
+            response_text = llm.invoke(messages)
             try:
-                return parse_json_object(response_text)
+                return parse_json_object(response_text.content)
             except (json.JSONDecodeError, ValueError) as exc:
                 last_error = exc
 
